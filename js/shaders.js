@@ -1,5 +1,8 @@
-// 程序化材質：不用貼圖，直接在 shader 裡依世界座標算出岩石、木紋、地面等表面。
-// 做法是在 Three.js 標準材質上「打補丁」，光照與陰影仍沿用內建計算。
+// 表面材質：在 Three.js 標準材質上「打補丁」，光照與陰影仍沿用內建計算。
+// 近看的細節來自 textures/ 裡的實拍 PBR 貼圖（Poly Haven，CC0），以三向投影貼上，不需要 UV；
+// 「哪裡長苔、哪裡濕、哪裡風化、木板接縫」這類分布仍由程序雜訊決定，疊在貼圖上。
+// 屋頂（ROOF）、竹垣（BAMBOO）、池底（BASIN）維持純程序做法。
+import * as THREE from 'three';
 import { POOL } from './layout.js';
 import { G } from './env.js';
 
@@ -43,63 +46,47 @@ float poolDepth(vec2 p){
 // 每種表面提供兩個函式：surfH（凹凸高度，公尺）與 surfC（顏色倍率與粗糙度）
 const MODES = {
   ROCK: /* glsl */ `
-    // 裂隙：把雜訊折成尖銳的谷線
-    float crease(vec3 p){ return 1.0 - abs(2.0 * fbm2(p) / 0.75 - 1.0); }
     float surfH(vec3 wp, vec3 op){
-      float cr = pow(crease(wp * 1.7 + 3.0), 6.0);
-      float pit = rs(0.55, 0.8, vnoise(wp * 26.0));
-      return fbm(wp * 2.4) * 0.07 + fbm(wp * 9.0) * 0.03 + vnoise(wp * 55.0) * 0.005 - cr * 0.05 - pit * 0.008;
+      // 只留大起伏；細部凹凸交給法線貼圖
+      return fbm(wp * 2.4) * 0.05 + fbm2(wp * 9.0) * 0.01;
     }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
       float a = fbm(wp * 1.3);
-      c = mix(vec3(0.12, 0.12, 0.13), vec3(0.42, 0.41, 0.39), a);
-      c *= 0.7 + 0.6 * fbm2(wp * vec3(7.0, 1.6, 7.0));
-      c *= 0.75 + 0.5 * vnoise(wp * 60.0);
-      float cr = pow(crease(wp * 1.7 + 3.0), 6.0);
-      c *= 1.0 - cr * 0.6;
-      // 地衣：灰白與赭黃的斑塊
-      float li = rs(0.6, 0.72, fbm(wp * 3.2 + 20.0)) * rs(0.1, 0.5, n.y + 0.4);
-      c = mix(c, mix(vec3(0.62, 0.64, 0.58), vec3(0.66, 0.56, 0.30), vnoise(wp * 2.0 + 8.0)), li * 0.55);
-      c = mix(c, vec3(0.62, 0.58, 0.50), rs(0.62, 0.8, vnoise(wp * 5.0 + 11.0)) * 0.35);
+      float lum = dot(gA, vec3(0.333)) / dot(uMean, vec3(0.333));
+      c = mix(vec3(dot(gA, vec3(0.333))), gA, 0.3) * gMacro * ROCK_TINT;
+      c *= mix(0.62, 1.12, a);
+      // 礦物染色：局部偏赭
+      c = mix(c, c * vec3(1.12, 0.98, 0.82), rs(0.55, 0.8, vnoise(wp * 2.3 + 11.0)) * 0.5);
+      // 地衣：灰白與赭黃的小斑塊，邊緣跟著石面顆粒碎開
+      float li = rs(0.60, 0.70, fbm(wp * 3.2 + 20.0) + (lum - 1.0) * 0.12) * rs(0.1, 0.5, n.y + 0.4);
+      c = mix(c, mix(vec3(0.50, 0.52, 0.46), vec3(0.55, 0.46, 0.24), vnoise(wp * 2.0 + 8.0)) * (0.7 + 0.3 * lum), li * 0.45);
       float wet = rs(0.2, -0.06, wp.y + (a - 0.5) * 0.12);
-      float moss = rs(0.35, 0.85, n.y) * rs(0.42, 0.6, fbm(wp * 1.6 + 7.0)) * (1.0 - wet);
-      c = mix(c, vec3(0.22, 0.30, 0.09) * (0.7 + 0.6 * vnoise(wp * 24.0)), moss * 0.85);
-      // 落在岩頂的紅葉
-      vec3 v = voro(wp.xz * 9.0);
-      float leaf = step(v.z, 0.16) * rs(0.3, 0.22, v.x) * rs(0.6, 0.9, n.y) * (1.0 - wet);
-      c = mix(c, mix(vec3(0.62, 0.10, 0.04), vec3(0.85, 0.45, 0.08), fract(v.z * 37.0)), leaf);
-      c *= mix(1.0, 0.45, wet);
-      r = mix(0.93, 0.22, wet);
+      float moss = rs(0.45, 0.9, n.y) * rs(0.47, 0.60, fbm(wp * 1.6 + 7.0) + (lum - 1.0) * 0.10) * (1.0 - wet);
+      vec3 mc = mix(vec3(0.060, 0.085, 0.025), vec3(0.125, 0.150, 0.045), vnoise(wp * 7.0)) * (0.5 + 1.0 * vnoise(wp * 110.0));
+      c = mix(c, mc, moss * 0.9);
+      c *= mix(1.0, 0.42, wet);
+      r = mix(gR, 0.2, wet);
       r = mix(r, 1.0, moss);
     }`,
   GROUND: /* glsl */ `
-    float leafMask(vec3 wp, float scale, float seed, out float id){
-      vec3 v = voro(wp.xz * scale + seed);
-      float dens = rs(0.3, 0.68, fbm2(wp * 0.33 + seed)) * 0.62 + 0.06;
-      id = fract(v.z * 53.0 + seed);
-      return step(v.z, dens) * rs(0.34, 0.26, v.x);
-    }
-    float surfH(vec3 wp, vec3 op){
-      float id; float l = max(leafMask(wp, 8.0, 0.0, id), leafMask(wp, 11.0, 5.3, id));
-      return vnoise(wp * 42.0) * 0.006 + fbm2(wp * 6.0) * 0.012 + l * 0.006;
-    }
+    float surfH(vec3 wp, vec3 op){ return fbm2(wp * 6.0) * 0.008; }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
       float a = fbm(wp * 2.2);
-      c = mix(vec3(0.21, 0.18, 0.14), vec3(0.40, 0.36, 0.29), a);
-      c *= 0.8 + 0.4 * vnoise(wp * 46.0);
-      float moss = rs(0.46, 0.66, fbm(wp * 0.55 + 3.0));
-      c = mix(c, vec3(0.20, 0.27, 0.10) * (0.75 + 0.5 * vnoise(wp * 30.0)), moss * 0.75);
+      float lum = dot(gA, vec3(0.333)) / dot(uMean, vec3(0.333));
+      c = gA * gMacro * GROUND_TINT;
+      c *= mix(0.8, 1.1, fbm2(wp * 0.6 + 4.0));
+      // 苔：成片分布，邊緣沿著砂礫的縫隙滲開，表面有絨毛般的細點
+      float mm = fbm(wp * 0.55 + 3.0) + (1.0 - lum) * 0.10;
+      float moss = rs(0.56, 0.66, mm);
+      vec3 mc = mix(vec3(0.050, 0.075, 0.022), vec3(0.115, 0.140, 0.042), vnoise(wp * 5.0 + 2.0));
+      mc *= 0.5 + 1.0 * vnoise(wp * 130.0) * (0.6 + 0.4 * lum);
+      c = mix(c, mc, moss * 0.88);
+      // 池邊被湯水打濕
       float t = poolT(wp.xz);
       float wet = rs(1.22, 1.02, t + (a - 0.5) * 0.1);
-      c = mix(c, vec3(0.30, 0.30, 0.31) * (0.7 + 0.5 * a), wet * 0.8);
-      float id1, id2;
-      float l1 = leafMask(wp, 8.0, 0.0, id1), l2 = leafMask(wp, 11.0, 5.3, id2);
-      vec3 lc1 = mix(vec3(0.58, 0.08, 0.03), vec3(0.86, 0.40, 0.06), id1);
-      vec3 lc2 = mix(vec3(0.70, 0.22, 0.04), vec3(0.88, 0.62, 0.12), id2);
-      c = mix(c, lc1 * (0.7 + 0.5 * id2), l1);
-      c = mix(c, lc2, l2);
-      c *= mix(1.0, 0.6, wet);
-      r = mix(0.97, 0.35, wet * (1.0 - max(l1, l2)));
+      c *= mix(1.0, 0.5, wet);
+      r = mix(gR, 0.28, wet * (1.0 - moss * 0.6));
+      r = mix(r, 1.0, moss * (1.0 - wet));
     }`,
   BASIN: /* glsl */ `
     float surfH(vec3 wp, vec3 op){
@@ -118,14 +105,15 @@ const MODES = {
       r = 0.55;
     }`,
   STONE: /* glsl */ `
-    float surfH(vec3 wp, vec3 op){ return fbm(wp * 16.0) * 0.008 + vnoise(wp * 70.0) * 0.002; }
+    float surfH(vec3 wp, vec3 op){ return fbm2(wp * 16.0) * 0.004; }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
-      c = vec3(0.72 + 0.22 * fbm(wp * 5.0));
-      c *= 0.8 + 0.35 * vnoise(wp * 80.0);
+      c = clamp(gA / uMean, 0.2, 2.2) * 0.82;
+      // 雨痕與積垢：朝上的面與凹處較深
       c = mix(c, c * vec3(0.55, 0.52, 0.48), rs(0.5, 0.75, fbm(wp * 2.0 + 4.0)));
-      float moss = rs(0.5, 0.7, fbm(wp * 3.0 + 9.0)) * rs(-0.2, 0.7, n.y) * 0.6;
-      c = mix(c, vec3(0.30, 0.38, 0.14), moss);
-      r = 0.9;
+      float lum = dot(gA, vec3(0.333)) / dot(uMean, vec3(0.333));
+      float moss = rs(0.5, 0.64, fbm(wp * 3.0 + 9.0) + (1.0 - lum) * 0.1) * rs(-0.2, 0.7, n.y) * 0.7;
+      c = mix(c, vec3(0.12, 0.15, 0.05) * (0.6 + 0.8 * vnoise(wp * 110.0)), moss);
+      r = mix(gR, 1.0, moss);
     }`,
   WOOD: /* glsl */ `
     vec3 grainP(vec3 op){
@@ -150,39 +138,20 @@ const MODES = {
         id = 0.5; return 0.0;
       #endif
     }
-    float grainN(vec3 q, float id){
-      vec3 g = vec3(q.x * 0.7 + id * 17.0, q.y * 26.0, q.z * 26.0) + vSeed;
-      return fbm(g);
-    }
-    // 木節：沿木紋拉長的同心圓
-    float knot(vec3 q, float id){
-      vec2 k = vec2(q.x * 0.9 + id * 9.0 + vSeed, (q.y + q.z) * 5.0 + id * 3.0);
-      vec3 v = voro(k);
-      return step(v.z, 0.16) * (1.0 - rs(0.0, 0.3, v.x));
-    }
     float surfH(vec3 wp, vec3 op){
       vec3 q = grainP(op); float id; float s = plankSeam(q, id);
-      float g = grainN(q, id);
-      float ring = sin((q.y * 0.6 + q.z) * 90.0 + g * 14.0 + id * 40.0);
-      // 風化後軟的春材被磨掉，留下一條條凸起的硬紋
-      return g * 0.012 + ring * 0.0022 + knot(q, id) * 0.004 - s * 0.012;
+      return -s * 0.012;
     }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
       vec3 q = grainP(op); float id; float s = plankSeam(q, id);
-      // 遠處木紋細過一個像素時淡出，避免閃爍
-      float aa = clamp(1.0 - (fwidth(q.y) + fwidth(q.z)) * 26.0, 0.0, 1.0);
-      float g = mix(0.5, grainN(q, id), aa);
-      float ring = mix(0.5, sin((q.y * 0.6 + q.z) * 90.0 + g * 14.0 + id * 40.0) * 0.5 + 0.5, aa * aa);
-      float kn = knot(q, id) * aa;
-      c = vec3(0.52 + 0.85 * g) * (0.8 + 0.3 * ring) * (0.8 + 0.4 * id);
-      c *= vec3(1.0, 0.97 - 0.1 * g, 0.92 - 0.16 * g);
-      c *= 1.0 - kn * 0.55;
+      // 貼圖只取「相對於平均色的變化」，木色由材質本身的顏色決定
+      c = clamp(gA / uMean, 0.25, 2.4) * WOOD_GAIN * (0.82 + 0.36 * id);
       // 風化：偏灰、近地處較深
       float weather = fbm2(wp * 1.7 + 2.0);
       c = mix(c, vec3(dot(c, vec3(0.333))) * vec3(0.92, 0.95, 1.0), weather * WEATHER);
-      c *= mix(0.7, 1.0, rs(0.0, 0.5, wp.y + weather * 0.3));
+      c *= mix(0.72, 1.0, rs(0.0, 0.5, wp.y + weather * 0.3));
       c *= 1.0 - s * 0.75;
-      r = 0.78 - 0.12 * ring;
+      r = clamp(gR + 0.05, 0.0, 1.0);
     }`,
   ROOF: /* glsl */ `
     // 杮葺：薄木片一排排疊上去。op.z 沿屋面斜向，op.x 沿屋脊方向
@@ -209,11 +178,13 @@ const MODES = {
       r = 0.95;
     }`,
   PLASTER: /* glsl */ `
-    float surfH(vec3 wp, vec3 op){ return fbm(wp * 9.0) * 0.004; }
+    float surfH(vec3 wp, vec3 op){ return fbm2(wp * 9.0) * 0.002; }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
-      c = vec3(0.9 + 0.12 * fbm(wp * 3.0));
-      c *= mix(0.86, 1.0, rs(0.3, 0.7, fbm2(wp * vec3(0.9, 0.3, 0.9) + 5.0)));
-      r = 0.95;
+      c = clamp(gA / uMean, 0.5, 1.6);
+      c *= 0.94 + 0.10 * fbm(wp * 3.0);
+      // 雨水順牆流下留下的淡痕
+      c *= mix(0.88, 1.0, rs(0.3, 0.7, fbm2(wp * vec3(0.9, 0.3, 0.9) + 5.0)));
+      r = max(gR, 0.85);
     }`,
   BAMBOO: /* glsl */ `
     // 竹穗垣：細竹直排，上下以橫竹押住
@@ -246,19 +217,145 @@ vec3 sBump(vec3 p, vec3 n, vec2 dH, float fd){
 }
 `;
 
+// ---------- 實拍貼圖 ----------
+// size：一張貼圖在場景裡涵蓋的邊長（公尺）；grainV：木紋沿貼圖的垂直方向
+export const TEXTURES = {
+  rock: { size: 1.5 },
+  stone: { size: 1.5 },
+  ground: { size: 2.0 },
+  wood: { size: 0.6, grainV: true },
+  woodold: { size: 0.5, grainV: true },
+  plaster: { size: 3.0 },
+};
+// 每種表面用哪一組貼圖、法線強度、是否加一層大尺度變化來打散重複感
+const TEX_USE = {
+  ROCK: { slot: 'rock', nstr: 1.3, macro: true },
+  GROUND: { slot: 'ground', nstr: 1.2, macro: true },
+  STONE: { slot: 'stone', nstr: 1.0 },
+  WOOD: { slot: 'wood', nstr: 1.2, object: true },
+  PLASTER: { slot: 'plaster', nstr: 0.7 },
+};
+const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25' };
+
+const loader = new THREE.TextureLoader();
+const texCache = new Map();
+function texSet(slot) {
+  if (texCache.has(slot)) return texCache.get(slot);
+  const mean = { value: new THREE.Vector3(0.5, 0.5, 0.5) };
+  const load = (kind, srgb, onLoad) => {
+    const t = loader.load(`textures/${slot}_${kind}.jpg`, onLoad);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 8;
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    return t;
+  };
+  const set = {
+    mean,
+    scale: { value: 1 / TEXTURES[slot].size },
+    // 載入後量出整張圖的平均色（線性空間），shader 用它把貼圖換算成「相對變化」
+    diff: { value: load('diff', true, (t) => {
+      const n = 32, cv = document.createElement('canvas');
+      cv.width = cv.height = n;
+      const g = cv.getContext('2d', { willReadFrequently: true });
+      g.drawImage(t.image, 0, 0, n, n);
+      const d = g.getImageData(0, 0, n, n).data, sum = [0, 0, 0];
+      for (let i = 0; i < d.length; i += 4) for (let k = 0; k < 3; k++) sum[k] += Math.pow(d[i + k] / 255, 2.2);
+      mean.value.set(sum[0], sum[1], sum[2]).multiplyScalar(1 / (n * n));
+    }) },
+    nor: { value: load('nor', false) },
+    rough: { value: load('rough', false) },
+  };
+  texCache.set(slot, set);
+  return set;
+}
+
+const TEX_FN = /* glsl */ `
+uniform sampler2D tDiff, tNor, tRough; uniform vec3 uMean; uniform float uTS;
+vec3 gP, gN, gW, gA; float gR, gMacro;
+// 三個投影面的貼圖座標。木頭的 U 軸一律沿木紋（gP.x）
+#ifdef TEX_GRAINV
+  #define UVX(p) (p).zy
+  #define UVY(p) (p).zx
+  #define UVZ(p) (p).yx
+#else
+  #define UVX(p) (p).yz
+  #define UVY(p) (p).xz
+  #define UVZ(p) (p).xy
+#endif
+vec3 tri(sampler2D t, vec3 p){
+  return texture2D(t, UVX(p)).rgb * gW.x + texture2D(t, UVY(p)).rgb * gW.y + texture2D(t, UVZ(p)).rgb * gW.z;
+}
+void texPrep(){
+  #ifdef TEX_OBJ
+    vec3 q = grainP(vOPos); float id; plankSeam(q, id);
+    // 每片木板、每個物件各取貼圖的不同位置，避免相鄰的木紋一模一樣
+    gP = (q + vec3(id * 3.71, id * 1.93, id * 2.37) + fract(vSeed * vec3(0.731, 0.417, 0.593)) * 5.0) * uTS;
+    gN = normalize(grainP(vON));
+  #else
+    gP = vWPos * uTS;
+    gN = normalize(vWN);
+  #endif
+  gW = pow(abs(gN), vec3(6.0)); gW /= gW.x + gW.y + gW.z;
+  gA = tri(tDiff, gP);
+  gR = tri(tRough, gP).g;
+  gMacro = 1.0;
+  #ifdef TEX_MACRO
+    // 同一張貼圖放大七倍再讀一次，只取明暗，疊出大尺度的深淺變化
+    vec3 m = tri(tDiff, gP * 0.137 + 0.31);
+    gMacro = mix(1.0, dot(m, vec3(0.333)) / dot(uMean, vec3(0.333)), 0.55);
+  #endif
+}
+// 三向投影的法線貼圖（whiteout 混合），回傳與 gN 同一空間的法線
+vec3 triNormal(){
+  vec3 a = texture2D(tNor, UVX(gP)).xyz * 2.0 - 1.0;
+  vec3 b = texture2D(tNor, UVY(gP)).xyz * 2.0 - 1.0;
+  vec3 c = texture2D(tNor, UVZ(gP)).xyz * 2.0 - 1.0;
+  a.xy *= TEX_NSTR; b.xy *= TEX_NSTR; c.xy *= TEX_NSTR;
+  #ifdef TEX_GRAINV
+    a.xy = a.yx; b.xy = b.yx; c.xy = c.yx;
+  #endif
+  vec3 na = vec3(abs(a.z) * gN.x, a.x + gN.y, a.y + gN.z);
+  vec3 nb = vec3(b.x + gN.x, abs(b.z) * gN.y, b.y + gN.z);
+  vec3 nc = vec3(c.x + gN.x, c.y + gN.y, abs(c.z) * gN.z);
+  return normalize(na * gW.x + nb * gW.y + nc * gW.z);
+}
+`;
+
 // 把表面函式注入標準材質
 export function patch(material, mode, defines = {}) {
-  const defs = { GRAIN: 0, WEATHER: '0.45', ...defines };
+  const defs = { GRAIN: 0, WEATHER: '0.45', ...TUNE, ...defines };
+  const use = TEX_USE[mode];
+  let tex = null;
+  if (use) {
+    // 木頭：樑柱、地板等一般木料用紋理清楚的風化木；牆板與檜木小物（weather 低）用細緻的那一組
+    const slot = mode === 'WOOD' && !(defs.PLANKY || Number(defs.WEATHER) <= 0.25) ? 'woodold' : use.slot;
+    tex = texSet(slot);
+    defs.USE_TEX = 1;
+    defs.TEX_NSTR = use.nstr.toFixed(2);
+    if (use.object) defs.TEX_OBJ = 1;
+    if (use.macro) defs.TEX_MACRO = 1;
+    if (TEXTURES[slot].grainV) defs.TEX_GRAINV = 1;
+  }
   const defStr = Object.entries(defs).map(([k, v]) => `#define ${k} ${v}`).join('\n');
   material.customProgramCacheKey = () => mode + defStr;
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = G.uTime;
     shader.uniforms.uCaustic = G.caustic;
+    if (tex) {
+      shader.uniforms.tDiff = tex.diff;
+      shader.uniforms.tNor = tex.nor;
+      shader.uniforms.tRough = tex.rough;
+      shader.uniforms.uMean = tex.mean;
+      shader.uniforms.uTS = tex.scale;
+    }
+    const VARY = 'varying vec3 vWPos; varying vec3 vOPos; varying vec3 vWN; varying vec3 vON; varying mat3 vM3; varying float vSeed;';
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
-        varying vec3 vWPos; varying vec3 vOPos; varying vec3 vWN; varying float vSeed;`)
+        ${VARY}`)
       .replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
-        vWN = normalize(mat3(modelMatrix) * objectNormal);`)
+        vWN = inverseTransformDirection(transformedNormal, viewMatrix);
+        vON = objectNormal;
+        vM3 = mat3(modelMatrix);`)
       .replace('#include <project_vertex>', `#include <project_vertex>
         vOPos = transformed;
         vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
@@ -266,19 +363,33 @@ export function patch(material, mode, defines = {}) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
         ${defStr}
-        varying vec3 vWPos; varying vec3 vOPos; varying vec3 vWN; varying float vSeed;
+        ${VARY}
         uniform float uTime; uniform float uCaustic;
         ${GLSL_NOISE}
         ${GLSL_POOL}
+        ${tex ? TEX_FN.split('void texPrep()')[0] : ''}
         ${MODES[mode]}
+        ${tex ? 'void texPrep()' + TEX_FN.split('void texPrep()')[1] : ''}
         ${BUMP_FN}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+        #ifdef USE_TEX
+          texPrep();
+        #endif
         vec3 sC; float sR;
         surfC(vWPos, vOPos, normalize(vWN), sC, sR);
         diffuseColor.rgb *= sC;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = sR;`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        #ifdef USE_TEX
+        {
+          vec3 tn = triNormal();
+          #ifdef TEX_OBJ
+            tn = normalize(vM3 * grainP(tn));
+          #endif
+          normal = normalize(mat3(viewMatrix) * tn);
+        }
+        #endif
         {
           float bFade = 1.0 - rs(10.0, 34.0, length(vViewPosition));
           if (bFade > 0.0) {

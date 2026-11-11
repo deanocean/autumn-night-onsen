@@ -1,0 +1,6 @@
+{
+  "name": "onsen-tools",
+  "private": true,
+  "description": "開發用工具：無頭 Chrome 截圖。不屬於網站本體。",
+  "dependencies": { "puppeteer-core": "^19.11.1" }
+}
