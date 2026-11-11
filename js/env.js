@@ -1,0 +1,22 @@
+// 全場共用的環境狀態：時間、太陽方向與光色。
+// 各個 shader 直接引用這些 uniform 物件，第三階段的日夜切換只要改這裡的值。
+import * as THREE from 'three';
+
+export const G = {
+  uTime: { value: 0 },
+  sunDir: { value: new THREE.Vector3(-0.5, 0.72, 0.48).normalize() },
+  sunCol: { value: new THREE.Color(1.0, 0.9, 0.74) },
+  // 水體與蒸氣受到的整體環境光（白天偏亮、夜晚偏暗）
+  ambient: { value: new THREE.Color(0.92, 0.95, 1.0) },
+  caustic: { value: 1 }, // 水底光網的強度（夜晚關掉）
+  steamCol: { value: new THREE.Color(1, 1, 1) },
+  steamDensity: { value: 1 },
+  sunSpec: { value: 1 },    // 水面太陽高光的強度
+  night: { value: 0 },      // 0 = 白天，1 = 夜晚
+  starBoost: { value: 1 },  // 熄燈後星空變亮的倍率（第四階段使用）
+  // 燈具：xyz 為位置，w 為亮度；水面與蒸氣用它算出被燈光染亮的程度
+  lampPos: { value: Array.from({ length: 16 }, () => new THREE.Vector4(0, -99, 0, 0)) },
+  lampCol: { value: new THREE.Color(1.0, 0.62, 0.3) },
+  skyTop: { value: new THREE.Color(0x4f86c6) },
+  skyHorizon: { value: new THREE.Color(0xd4dde6) },
+};
