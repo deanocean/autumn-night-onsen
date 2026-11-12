@@ -1,5 +1,5 @@
 // 把 layout.js 的平面圖蓋成實際的場景：地形、岩石、湯屋、東屋、望景台、竹垣。
-// 樹在 trees.js；燈籠與小物目前仍是簡化版（temp 群組），4B 再換成精細模型。
+// 樹在 trees.js；燈籠與小物在 props.js。
 import * as THREE from 'three';
 import * as L from './layout.js';
 import { patch } from './shaders.js';
@@ -21,7 +21,7 @@ export const MATERIALS = M;
 
 const woodCache = new Map();
 // color：木色；grain：木紋走向（0=x,1=y,2=z）；plank：木板寬度（公尺，可省略）；weather：風化程度
-function wood(color, grain = 0, plank = 0, weather = 0.45, plankY = false) {
+export function wood(color, grain = 0, plank = 0, weather = 0.45, plankY = false) {
   const key = `${color}|${grain}|${plank}|${weather}|${plankY}`;
   if (!woodCache.has(key)) {
     const defs = { GRAIN: grain, WEATHER: weather.toFixed(2) };
@@ -66,7 +66,7 @@ function vnoise(x, y, z) {
 export const fbm = (x, y, z) => 0.5 * vnoise(x, y, z) + 0.25 * vnoise(x * 2.1 + 3, y * 2.1 + 7, z * 2.1 + 1) + 0.125 * vnoise(x * 4.3 + 9, y * 4.3 + 2, z * 4.3 + 5);
 
 // 岩石：球體先用雜訊推出起伏，再用幾個隨機平面「削」出稜角
-function rockGeometry(rand, detail = 28) {
+export function rockGeometry(rand, detail = 28) {
   detail = Math.round(detail * 1.5);
   const geo = new THREE.SphereGeometry(1, detail, Math.round(detail * 0.7));
   const p = geo.attributes.position;
@@ -413,10 +413,12 @@ export function buildWorld(scene) {
       const y = beamY - 0.42;
       cyl(world, 0.006, 0.006, 0.2, x, y + 0.26, pz, M.dark, 4);
       wbox(world, 0.2, 0.025, 0.2, x, y + 0.155, pz, CEDAR_DARK);
-      box(world, 0.16, 0.28, 0.16, x, y, pz, M.paper).castShadow = false;
+      const pm = M.paper.clone(); // 每盞各自一份，才能逐盞熄滅
+      const body = box(world, 0.16, 0.28, 0.16, x, y, pz, pm);
+      body.castShadow = false;
       for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) wbox(world, 0.014, 0.28, 0.014, x + ox * 0.082, y, pz + oz * 0.082, CEDAR_DARK).castShadow = false;
       wbox(world, 0.19, 0.02, 0.19, x, y - 0.15, pz, CEDAR_DARK);
-      lamps.push({ x, y, z: pz, kind: 'hanging' });
+      lamps.push({ x, y, z: pz, kind: 'hanging', mat: pm, paper: body });
     }
     // 長椅與脫衣籠
     {
@@ -463,12 +465,13 @@ export function buildWorld(scene) {
       // 入口兩側的提燈
       for (const sd of [-1, 1]) {
         const x = doorX + sd * 0.98, y = 2.28, z = 8.75;
-        const body = mesh(world, new THREE.SphereGeometry(0.15, 20, 14), M.paper, x, y, z, false);
+        const pm = M.paper.clone();
+        const body = mesh(world, new THREE.SphereGeometry(0.15, 20, 14), pm, x, y, z, false);
         body.scale.y = 1.3;
         cyl(world, 0.075, 0.085, 0.035, x, y + 0.2, z, M.dark, 14);
         cyl(world, 0.085, 0.075, 0.035, x, y - 0.2, z, M.dark, 14);
         cyl(world, 0.005, 0.005, 0.36, x, y + 0.4, z, M.dark, 4);
-        lamps.push({ x, y, z, kind: 'chochin' });
+        lamps.push({ x, y, z, kind: 'chochin', mat: pm, paper: body });
       }
     }
 
@@ -568,29 +571,6 @@ export function buildWorld(scene) {
     s.rotation.y = rand() * 3;
     s.castShadow = false;
   });
-
-  // ---------- 以下為暫用的簡化物件（第四階段替換） ----------
-  const temp = new THREE.Group();
-  world.add(temp);
-  L.LANTERNS.forEach(([x, z, kind]) => {
-    const y0 = L.groundY(x, z);
-    if (kind === 'stone') {
-      cyl(temp, 0.12, 0.16, 0.8, x, y0 + 0.4, z, M.stone, 6);
-      box(temp, 0.34, 0.3, 0.34, x, y0 + 0.95, z, M.paper);
-      cyl(temp, 0.05, 0.36, 0.22, x, y0 + 1.22, z, M.stone, 6);
-    } else {
-      box(temp, 0.26, 0.5, 0.26, x, y0 + 0.3, z, M.paper);
-      wbox(temp, 0.3, 0.04, 0.3, x, y0 + 0.57, z, CEDAR_DARK);
-    }
-  });
-  {
-    const P = L.PROPS;
-    cyl(temp, 0.17, 0.15, 0.16, P.oke.x, 0.08, P.oke.z, wood(HINOKI, 1, 0, 0.1), 18);
-    cyl(temp, 0.06, 0.06, 0.9, P.shishi.x, 0.55, P.shishi.z, wood(0x8a7a48, 1, 0, 0.2), 8).rotation.z = 1.2;
-    cyl(temp, 0.3, 0.34, 0.25, P.shishi.x + 0.3, 0.12, P.shishi.z, M.stone, 10);
-    wbox(temp, 0.5, 0.3, 0.35, P.milk.x, L.ENGAWA.y + 0.15, P.milk.z, CEDAR);
-    cyl(temp, 0.035, 0.035, 0.16, P.milk.x, L.ENGAWA.y + 0.38, P.milk.z, std({ color: 0xffffff, roughness: 0.3 }), 12);
-  }
 
   // ---------- 北側山坡、谷底與三面的近山（遠山在 sky.js） ----------
   {

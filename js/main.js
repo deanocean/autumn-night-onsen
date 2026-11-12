@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { buildWorld } from './world.js';
+import { createProps } from './props.js';
 import { createTrees } from './trees.js';
 import { createWater } from './water.js';
 import { createSteam } from './steam.js';
@@ -49,11 +50,12 @@ scene.add(sun);
 const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 1500);
 
 const { world, lamps } = buildWorld(scene);
+const props = createProps(world);
 const trees = createTrees(scene, world);
 const water = createWater(scene);
 createSteam(scene);
 const sky = createSky(scene);
-const lights = createLights(scene, lamps);
+const lights = createLights(scene, props.lanterns, lamps);
 const dayNight = createDayNight({ scene, renderer, sun, hemi, sky, lights });
 const guides = createGuides(scene);
 const player = new Player(camera, canvas);
@@ -116,4 +118,4 @@ function frame() {
 frame();
 
 // 供自動檢查使用
-window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees };
+window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props };

@@ -28,6 +28,9 @@ const flag = (k, d) => { const a = args.find((s) => s.startsWith(`--${k}=`)); re
 const night = args.includes('--night');
 const top = args.includes('--top'); // 鳥瞰（等同按 M）
 const W = flag('w', 1600), H = flag('h', 900);
+// --eval=程式碼：進場後、拍照前在頁面裡執行（例如熄掉某盞燈）
+const evalArg = args.find((s) => s.startsWith('--eval='));
+const evalCode = evalArg ? evalArg.slice(7) : '';
 let views = args.filter((s) => !s.startsWith('--')).map((s) => {
   const [name, rest] = s.split(':');
   const [x, z, yaw, pitch] = rest.split(',').map(Number);
@@ -66,6 +69,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.click('#start');
     await wait(1500);
     if (night) { await page.evaluate(() => window.__onsen.dayNight.toggle()); await wait(7500); }
+    if (evalCode) { const r = await page.evaluate(evalCode); if (r !== undefined) console.log('eval:', JSON.stringify(r)); await wait(300); }
     if (top) await page.evaluate(() => window.__onsen.guides.setTop(true));
     for (const [name, x, z, yaw, pitch] of views) {
       await page.evaluate((x, z, yaw, pitch) => {

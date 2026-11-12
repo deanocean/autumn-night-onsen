@@ -127,14 +127,17 @@ export const PATH_STONES = [
   [-6.9, 4.6, 0.42], [-7.8, 3.2, 0.46], [-8.6, 2.2, 0.44],
 ];
 
-// 小物位置（第四階段會換成精細模型並加上互動）
+// 小物位置（模型在 props.js；rot 是繞 y 軸的朝向）
 export const PROPS = {
-  oke: { x: -7.9, z: -1.2 },          // 檜木桶與手巾，東屋下池邊
-  shishi: { x: -10.9, z: 6.4 },       // 鹿威し
-  milk: { x: -1.2, z: 10.4 },         // 簷廊上的牛奶
-  mapleBranch: { x: -2.2, z: 5.2 },   // 可搖落紅葉的低枝
+  oke: { x: -7.9, z: -1.2 },                      // 檜木桶，東屋下池邊
+  stool: { x: -8.35, z: -1.0, rot: 0.5 },         // 小凳與手巾
+  shishi: { x: -10.9, z: 6.4, rot: Math.PI / 2 }, // 鹿威し（rot 0 時竹筒口朝 +x）
+  milk: { x: -1.2, z: 10.4, rot: 0 },             // 簷廊上的牛奶木箱
+  mapleBranch: { x: -2.2, z: 5.2 },               // 可搖落紅葉的低枝
 };
-circles.push({ x: PROPS.shishi.x, z: PROPS.shishi.z, r: 0.45 });
+circles.push({ x: PROPS.shishi.x, z: PROPS.shishi.z, r: 0.7 });
+circles.push({ x: PROPS.stool.x, z: PROPS.stool.z, r: 0.22 });
+circles.push({ x: PROPS.milk.x, z: PROPS.milk.z, r: 0.3 });
 
 export const START = { x: -5.2, z: 10.1, yaw: 0.12 };
 
