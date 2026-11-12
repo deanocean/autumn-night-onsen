@@ -17,6 +17,7 @@ const intro = document.getElementById('intro');
 const resume = document.getElementById('resume');
 const errBox = document.getElementById('err');
 const timeBtn = document.getElementById('time');
+const helpBtn = document.getElementById('helpbtn');
 
 function fail(msg) {
   errBox.textContent = msg;
@@ -83,10 +84,12 @@ document.getElementById('start').addEventListener('click', () => {
   intro.classList.add('hide');
   player.enabled = true;
   timeBtn.hidden = false;
+  helpBtn.hidden = false;
   player.lock();
   canvas.focus();
 });
 timeBtn.addEventListener('click', () => { toggleTime(); timeBtn.blur(); });
+helpBtn.addEventListener('click', () => { interact.key('KeyH'); helpBtn.blur(); });
 
 canvas.tabIndex = 0;
 canvas.addEventListener('click', () => {

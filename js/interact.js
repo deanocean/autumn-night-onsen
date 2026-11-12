@@ -71,6 +71,10 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = gr; ctx.fillRect(0, 0, 32, 32);
     const mat = new THREE.PointsMaterial({ map: new THREE.CanvasTexture(c), size: 0.045, transparent: true, opacity: 0.8, depthWrite: false });
+    // 貼近鏡頭的水珠不要放大成一團（往自己身上淋水時水珠就在眼前）
+    mat.onBeforeCompile = (sh) => {
+      sh.vertexShader = sh.vertexShader.replace('#include <logdepthbuf_vertex>', 'gl_PointSize = min(gl_PointSize, scale * 0.075);\n#include <logdepthbuf_vertex>');
+    };
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false; pts.renderOrder = 4; pts.visible = false;
     scene.add(pts);
@@ -123,50 +127,76 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     for (let s = 0; s < 4 && L.poolT(dip.x, dip.z) > 0.92; s += 0.05) dip.addScaledVector(dir, 0.05);
     const axis = V(dir.z, 0, -dir.x); // 繞這條軸轉，桶口會倒向池心
     const wy = L.POOL.waterY;
-    const q = new THREE.Quaternion(), p = V(), v = V();
+    const q = new THREE.Quaternion(), p = V(), v = V(), fwd = V(), side = V();
     let running = false;
     targets.push({
       id: 'oke', type: 'oke', pos: home.clone().setY(home.y + 0.08), r: 0.3,
       label: () => '舀水',
       enabled: () => !running,
       glow,
+      // かけ湯：伸到池邊舀一桶，提到自己肩頭往身上淋，再放回原位
       act() {
-        running = true;
-        let t = 0, dipped = false, thrown = false;
+        running = true; busy = true; player.frozen = true;
+        let t = 0, dipped = false, splashed = false, acc = 0;
+        const reachS = home.distanceTo(dip);
+        const A = dip.clone().setY(wy + 0.02);
+        // 舉到眼前偏右上方
+        camera.getWorldDirection(fwd).setY(0);
+        if (fwd.lengthSq() < 1e-4) fwd.set(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+        fwd.normalize();
+        side.set(-fwd.z, 0, fwd.x);
+        camera.updateMatrixWorld();
+        const cr = V(), cu = V(), cb = V();
+        camera.matrixWorld.extractBasis(cr, cu, cb);
+        const H = camera.position.clone().addScaledVector(cb, -0.62).addScaledVector(cu, 0.13).addScaledVector(cr, 0.2);
+        const axisP = cr; // 繞這條軸轉，桶口會倒向自己
+        const wet = L.inWater(camera.position.x, camera.position.z);
+        const feet = wet ? wy : L.groundY(camera.position.x, camera.position.z);
         anims.push((dt) => {
           t += dt;
-          // 位置：沿「桶 → 水邊 → 池心」方向的前後距離 s 與高度 y
-          const reachS = home.distanceTo(dip);
-          const s = track(t, [[0, 0], [0.5, reachS], [0.85, reachS], [1.2, reachS - 0.2], [1.45, reachS + 0.3], [1.8, reachS], [2.7, 0]]);
-          const y = track(t, [[0, home.y], [0.25, home.y + 0.3], [0.5, wy + 0.22], [0.72, wy - 0.03], [0.85, wy + 0.02], [1.2, wy + 0.8], [1.45, wy + 0.95], [1.9, home.y + 0.4], [2.7, home.y]]);
-          const tilt = track(t, [[0, 0], [0.5, 1.0], [0.72, 1.15], [0.9, 0.2], [1.2, -0.35], [1.45, 1.95], [1.75, 1.6], [2.5, 0], [2.7, 0]]);
-          oke.position.copy(home).addScaledVector(dir, s).setY(y);
-          oke.quaternion.copy(homeQ).premultiply(q.setFromAxisAngle(axis, tilt));
+          if (t < 0.85) {
+            const s = track(t, [[0, 0], [0.5, reachS], [0.85, reachS]]);
+            const y = track(t, [[0, home.y], [0.25, home.y + 0.3], [0.5, wy + 0.22], [0.72, wy - 0.03], [0.85, wy + 0.02]]);
+            oke.position.copy(home).addScaledVector(dir, s).setY(y);
+          } else if (t < 2.75) {
+            const k = track(t, [[0.85, 0], [1.7, 1]]);
+            oke.position.lerpVectors(A, H, k);
+            oke.position.y += Math.sin(k * Math.PI) * 0.12;
+          } else {
+            const k = track(t, [[2.75, 0], [3.7, 1]]);
+            oke.position.lerpVectors(H, home, k);
+            oke.position.y += Math.sin(k * Math.PI) * 0.15;
+          }
+          const tiltDip = track(t, [[0, 0], [0.5, 1.0], [0.72, 1.15], [0.95, 0]]);
+          const tiltPour = track(t, [[1.6, 0], [2.0, 1.45], [2.5, 1.7], [3.1, 0]]);
+          oke.quaternion.copy(homeQ).premultiply(q.setFromAxisAngle(axis, tiltDip)).premultiply(q.setFromAxisAngle(axisP, tiltPour));
           if (!dipped && t > 0.68) {
             dipped = true;
             props.oke.water.visible = true;
             water.addRipple(dip.x, dip.z, 0.9);
           }
-          if (!thrown && t > 1.36) {
-            thrown = true;
-            props.oke.water.visible = false;
-            // 一桶水成扇形潑出去
-            p.copy(oke.position).setY(oke.position.y + 0.1);
-            for (let i = 0; i < 110; i++) {
-              const sp = 2.0 + rnd() * 1.9, side = (rnd() - 0.5) * 1.5;
-              v.copy(dir).multiplyScalar(sp).addScaledVector(axis, side).setY(0.9 + rnd() * 2.0);
-              drops.emit(p, v, wy);
+          // 水從桶口成一道水簾淋下來
+          if (t > 1.85 && t < 2.5) {
+            acc += dt * 300;
+            while (acc >= 1) {
+              acc -= 1;
+              p.copy(oke.position).addScaledVector(fwd, -0.13).addScaledVector(side, (rnd() - 0.5) * 0.16);
+              p.y += 0.02;
+              v.copy(fwd).multiplyScalar(-(0.35 + rnd() * 0.7)).addScaledVector(side, (rnd() - 0.5) * 0.5).setY(-0.2 - rnd() * 0.9);
+              drops.emit(p, v, feet);
             }
-            const lx = oke.position.x + dir.x * 1.5, lz = oke.position.z + dir.z * 1.5;
-            setTimeout(() => {
-              water.addRipple(lx, lz, 3.0);
-              water.addRipple(lx + dir.x * 0.5 + axis.x * 0.3, lz + dir.z * 0.5 + axis.z * 0.3, 1.6);
-              water.addRipple(lx - dir.x * 0.3 - axis.x * 0.35, lz - dir.z * 0.3 - axis.z * 0.35, 1.3);
-            }, 480);
           }
-          if (t >= 2.7) {
+          if (t > 2.4) props.oke.water.visible = false;
+          if (!splashed && t > 2.25) {
+            splashed = true;
+            if (wet) {
+              water.addRipple(camera.position.x, camera.position.z, 1.6);
+              setTimeout(() => water.addRipple(camera.position.x + side.x * 0.25, camera.position.z + side.z * 0.25, 1.0), 260);
+            }
+          }
+          if (t >= 3.7) {
             oke.position.copy(home); oke.quaternion.copy(homeQ);
-            running = false;
+            running = false; busy = false; player.frozen = false;
             return false;
           }
           return true;
@@ -506,8 +536,9 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     get gaze() { return gaze; },
     get mode() { return mode; },
     key(code) {
-      if (code === 'KeyH') { helpEl.hidden = !helpEl.hidden; return; }
-      if (code === 'Escape') { helpEl.hidden = true; return; }
+      // 關掉說明時把「提示過了」的紀錄清掉，各項提示會再出現一次
+      if (code === 'KeyH') { helpEl.hidden = !helpEl.hidden; if (helpEl.hidden) done.clear(); return; }
+      if (code === 'Escape') { if (!helpEl.hidden) done.clear(); helpEl.hidden = true; return; }
       if (guides.top) return;
       const move = /^(Key[WASD]|Arrow)/.test(code);
       if (mode && (code === 'KeyE' || move)) { if (!busy) stand(); return; }

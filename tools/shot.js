@@ -65,6 +65,8 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const page = await browser.newPage();
     page.on('console', (m) => { if (m.type() === 'error' && !/favicon/.test(m.location().url || '')) console.log('console error:', m.text(), m.location().url || ''); });
     page.on('pageerror', (e) => console.log('pageerror:', e.message));
+    // 截圖時不要鎖定滑鼠：無頭 Chrome 的滑鼠鎖定會把使用者真正的游標拉來拉去
+    await page.evaluateOnNewDocument(() => { Element.prototype.requestPointerLock = () => {}; });
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
     await page.click('#start');
     await wait(1500);
