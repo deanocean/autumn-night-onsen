@@ -30,7 +30,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
 
   const targets = [];     // 可注視的物件
   const anims = [];       // 進行中的動畫：(dt) => 是否還要繼續
-  const done = new Set(); // 做過的互動種類（提示只出現到第一次做完為止）
+  const done = new Set(); // 做過的互動種類（目前只是紀錄；提示改成每次都顯示）
   let gaze = null;
   let busy = false;       // 喝牛奶這類不能被打斷的動作
   let mode = null;        // 'soak' 泡湯中、'bench' 坐著觀星
@@ -231,7 +231,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
         sky.meteor.rate = 3;
         sky.meteor.wait = Math.min(sky.meteor.wait, 2.5);
         document.body.classList.add('quiet');
-        if (!done.has('stand')) flash('再按 E 起身', 3.5);
+        flash('<kbd>E</kbd>起身', 3.5);
       },
       leave() {
         player.anchor = back;
@@ -486,7 +486,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     // 坐進湯裡，視線降到水面上方
     player.eyeTarget = L.POOL.waterY + 0.34 - L.groundY(player.pos.x, player.pos.z);
     water.addRipple(player.pos.x, player.pos.z, 1.6);
-    if (!done.has('stand')) flash('再按 E 起身', 3.5);
+    flash('<kbd>E</kbd>起身', 3.5);
   }
   function stand() {
     if (mode === 'bench') targets.find((t) => t.id === 'bench').leave();
@@ -536,9 +536,8 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     get gaze() { return gaze; },
     get mode() { return mode; },
     key(code) {
-      // 關掉說明時把「提示過了」的紀錄清掉，各項提示會再出現一次
-      if (code === 'KeyH') { helpEl.hidden = !helpEl.hidden; if (helpEl.hidden) done.clear(); return; }
-      if (code === 'Escape') { if (!helpEl.hidden) done.clear(); helpEl.hidden = true; return; }
+      if (code === 'KeyH') { helpEl.hidden = !helpEl.hidden; return; }
+      if (code === 'Escape') { helpEl.hidden = true; return; }
       if (guides.top) return;
       const move = /^(Key[WASD]|Arrow)/.test(code);
       if (mode && (code === 'KeyE' || move)) { if (!busy) stand(); return; }
@@ -587,8 +586,8 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       flashT = Math.max(0, flashT - dt);
       let hint = '';
       if (flashT > 0) hint = flashText;
-      else if (gaze && !done.has(gaze.type)) hint = `<kbd>E</kbd>${gaze.label()}`;
-      else if (!gaze && !done.has('soak') && canSoak() && !guides.top) hint = '<kbd>E</kbd>泡湯';
+      else if (gaze) hint = `<kbd>E</kbd>${gaze.label()}`;
+      else if (!gaze && !mode && !busy && canSoak() && !guides.top) hint = '<kbd>E</kbd>泡湯';
       setHint(hint);
     },
   };
