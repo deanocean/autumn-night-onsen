@@ -16,8 +16,8 @@ const MIX = {
   master: 0.9,
   stream: 1.5,     // 湯口（有方位，越近越大聲）
   soak: 0.42,      // 泡湯時貼在耳邊的水聲
-  birds: 0.6,
-  crickets: 0.42,
+  birds: 0.5,
+  crickets: 0.36,
   wind: 0.26,
   steps: 0.32,
 };

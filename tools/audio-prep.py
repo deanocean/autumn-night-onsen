@@ -31,16 +31,32 @@ def save(name, x, kbps):
     subprocess.run(['afconvert', '-f', 'm4af', '-d', 'aac', '-b', str(kbps * 1000), '-q', '127', f'audio/out/{name}.wav', dst], check=True)
     print(f'{name:12} {len(x)/SR:6.2f}s {x.shape[1]}ch rms {db(rms(x)):6.1f} peak {db(np.abs(x).max()):6.1f} {os.path.getsize(dst)//1024:5}KB')
 PAD = 0.25
-def loop(x, start, P, X=3.0, target=-24):
+def loop(x, start, P, X=3.0, target=-24, peak=None):
     # 週期 P 秒的無縫循環：開頭 X 秒與 P 之後的 X 秒交叉淡化；前後各多放 PAD 秒的週期延伸
     s, n, k = int(start * SR), int(P * SR), int(X * SR)
     seg = x[s:s + n + k].copy()
     t = np.linspace(0, np.pi / 2, k)[:, None]
     body = seg[:n].copy()
     body[:k] = seg[:k] * np.sin(t) + seg[n:n + k] * np.cos(t)
-    body *= 10 ** (target / 20) / rms(body)
+    # peak：改用峰值對齊（稀疏的聲音用 RMS 對齊會被放得太大）
+    body *= 10 ** (peak / 20) / np.percentile(np.abs(body), 99.9) if peak is not None else 10 ** (target / 20) / rms(body)
     p = int(PAD * SR)
     return np.concatenate([body[-p:], body, body[:p]])
+def sparse(x, pct=72, floor_db=-20, power=2.0):
+    # 向下擴展：只留突出的聲音，其餘壓到 floor_db。門檻取包絡的第 pct 百分位
+    w = SR // 100
+    a = np.abs(x).max(1)
+    e = np.array([a[i:i + w].max() for i in range(0, len(a), w)])
+    env = np.zeros_like(e); v = 0.0
+    for i, t in enumerate(e):  # 快起慢落（落下約 0.25 秒）
+        v = t if t > v else v * 0.96
+        env[i] = v
+    env = np.maximum(env, np.roll(env, -3))  # 提前 30 ms 打開，不切掉叫聲的開頭
+    thr = np.percentile(env, pct)
+    g = np.clip(env / thr, 0, 1) ** power
+    g = np.maximum(g, 10 ** (floor_db / 20))
+    g = np.interp(np.arange(len(a)), np.arange(len(e)) * w + w / 2, g)
+    return x * g[:, None].astype(np.float32)
 def onsets(m, lo, hi, gap, thr_db):
     w = SR // 100
     e = np.array([np.sqrt(np.mean(m[i:i + w] ** 2)) for i in range(0, len(m) - w, w)])
@@ -69,8 +85,9 @@ def shot(m, a, b, fade_out, target_peak=-3, fade_in=0.008):
 # ---- 環境聲（循環） ----
 x = load('audio/236981_st.wav').mean(1, keepdims=True)
 save('stream', loop(filt(x, lo=120), 2, 45), 96)
-b = filt(load('audio/518671_st.wav'), lo=450)
-save('birds', loop(b, 26, 52, X=4), 112)
+# 只留清脆的高音鳥鳴：濾掉 3 kHz 以下那群密集的鳥，再把不突出的叫聲壓下去
+b = sparse(filt(load('audio/518671_st.wav'), lo=3000, soft=1.2))
+save('birds', loop(b, 26, 52, X=4, peak=-15), 112)
 c = filt(load('audio/175020_st.wav'), lo=1200)
 c2 = filt(load('audio/530477_st.wav'), lo=1500)
 n = int(52 * SR); s2 = int(8 * SR)
