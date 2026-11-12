@@ -1,5 +1,5 @@
 // 互動：不顯示準星，靠「視線 + 距離」決定目前注視的物件，被注視的物件自身微微發亮，按 E 觸發。
-// 每種互動只在第一次浮出一行小字提示；H 叫出操作說明。
+// 注視時畫面下方浮出一行小字提示；H 叫出操作說明。各互動的聲音交給 audio.js。
 // 內容：點燈熄燈（全熄後星空變亮）、木桶舀水、坐下觀星、搖落紅葉、湯上牛奶、泡湯；鹿威し自動循環。
 import * as THREE from 'three';
 import * as L from './layout.js';
@@ -23,7 +23,7 @@ function track(t, keys) {
   return keys[keys.length - 1][1];
 }
 
-export function createInteract({ scene, world, camera, player, props, lights, trees, water, sky, guides }) {
+export function createInteract({ scene, world, camera, player, props, lights, trees, water, sky, guides, audio }) {
   const hintEl = document.getElementById('hint');
   const helpEl = document.getElementById('help');
   scene.updateMatrixWorld(true);
@@ -112,7 +112,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       pos: lamp.paper.getWorldPosition(V()),
       r: lamp.kind === 'stone' ? 0.36 : 0.28, reach: high ? 3.2 : REACH,
       label: () => (lamp.on ? '熄燈' : '點燈'),
-      act() { lamp.on = !lamp.on; },
+      act() { lamp.on = !lamp.on; audio.lamp(this.pos, lamp.on); },
       glow(v) { lamp.hl = v; },
     });
   });
@@ -137,7 +137,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       // かけ湯：伸到池邊舀一桶，提到自己肩頭往身上淋，再放回原位
       act() {
         running = true; busy = true; player.frozen = true;
-        let t = 0, dipped = false, splashed = false, acc = 0;
+        let t = 0, dipped = false, poured = false, splashed = false, acc = 0;
         const reachS = home.distanceTo(dip);
         const A = dip.clone().setY(wy + 0.02);
         // 舉到眼前偏右上方
@@ -174,9 +174,11 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
             dipped = true;
             props.oke.water.visible = true;
             water.addRipple(dip.x, dip.z, 0.9);
+            audio.oke('dip', { x: dip.x, y: wy, z: dip.z });
           }
           // 水從桶口成一道水簾淋下來
           if (t > 1.85 && t < 2.5) {
+            if (!poured) { poured = true; audio.oke('pour'); }
             acc += dt * 300;
             while (acc >= 1) {
               acc -= 1;
@@ -196,6 +198,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
           }
           if (t >= 3.7) {
             oke.position.copy(home); oke.quaternion.copy(homeQ);
+            audio.oke('set', home);
             running = false; busy = false; player.frozen = false;
             return false;
           }
@@ -370,7 +373,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       label: () => '搖一搖楓枝',
       enabled: () => !leaves.shaking,
       glow(v) { mat.emissive.setRGB(0.16 * v, 0.085 * v, 0.04 * v); },
-      act() { leaves.shake(); },
+      act() { leaves.shake(); audio.leaf(trees.low.pos); },
     });
   }
 
@@ -388,9 +391,11 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       glow,
       act() {
         b.empty = true; busy = true; player.frozen = true;
-        let t = 0, prev = 0;
+        let t = 0, prev = 0, stage = 0;
         anims.push((dt) => {
           t += dt;
+          if (stage === 0 && t > 0.5) { stage = 1; audio.milk('cap'); }
+          if (stage === 1 && t > 1.1) { stage = 2; audio.milk('drink'); }
           const inHand = track(t, [[0, 0], [0.6, 1], [2.8, 1], [3.5, 0]]);
           const tilt = track(t, [[0.7, 0], [1.05, 0.75], [2.3, 1.05], [2.75, 0]]);
           // 仰頭喝，喝完視線回到原位
@@ -409,6 +414,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
           if (t > 2.3) b.liquid.visible = false;
           if (t >= 3.5) {
             g.position.copy(home); g.quaternion.copy(homeQ);
+            audio.milk('back', this.pos);
             busy = false; player.frozen = false;
             return false;
           }
@@ -450,7 +456,10 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       get phase() { return c; },
       set phase(x) { c = x; },
       update(dt) {
+        const c0 = c;
         c = (c + dt) % CYCLE;
+        if (c0 <= 9.75 && c > 9.75) audio.shishi('pour', S.group.position);
+        if (c0 <= 11.08 && c > 11.08) audio.shishi('knock', S.group.position);
         let a = S.rest;
         if (c > 9.0 && c <= 9.9) { const k = (c - 9.0) / 0.9; a = S.rest + (DOWN - S.rest) * k * k * k; }      // 注滿、越倒越快
         else if (c > 9.9 && c <= 10.8) a = DOWN + Math.sin((c - 9.9) * 9) * 0.02 * (10.8 - c);                 // 倒水
@@ -486,11 +495,12 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     // 坐進湯裡，視線降到水面上方
     player.eyeTarget = L.POOL.waterY + 0.34 - L.groundY(player.pos.x, player.pos.z);
     water.addRipple(player.pos.x, player.pos.z, 1.6);
+    audio.soak(true);
     flash('<kbd>E</kbd>起身', 3.5);
   }
   function stand() {
     if (mode === 'bench') targets.find((t) => t.id === 'bench').leave();
-    if (mode === 'soak') water.addRipple(player.pos.x, player.pos.z, 1.8);
+    if (mode === 'soak') { water.addRipple(player.pos.x, player.pos.z, 1.8); audio.soak(false); }
     player.frozen = false;
     player.eyeTarget = null;
     look = null;

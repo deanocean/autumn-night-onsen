@@ -13,7 +13,7 @@ const OUT = path.join(__dirname, 'shots');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-  '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
+  '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.ogg': 'audio/ogg', '.wav': 'audio/wav' };
 
 const DEFAULTS = [
   ['start', -5.2, 10.1, 0.12, -0.04],

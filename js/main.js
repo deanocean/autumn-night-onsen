@@ -10,6 +10,7 @@ import { createDayNight } from './daynight.js';
 import { createGuides } from './labels.js';
 import { Player } from './player.js';
 import { createInteract } from './interact.js';
+import { createAudio } from './audio.js';
 import { G } from './env.js';
 
 const canvas = document.getElementById('scene');
@@ -18,6 +19,7 @@ const resume = document.getElementById('resume');
 const errBox = document.getElementById('err');
 const timeBtn = document.getElementById('time');
 const helpBtn = document.getElementById('helpbtn');
+const soundBtn = document.getElementById('sound');
 
 function fail(msg) {
   errBox.textContent = msg;
@@ -61,7 +63,8 @@ const lights = createLights(scene, props.lanterns, lamps);
 const dayNight = createDayNight({ scene, renderer, sun, hemi, sky, lights });
 const guides = createGuides(scene);
 const player = new Player(camera, canvas);
-const interact = createInteract({ scene, world, camera, player, props, lights, trees, water, sky, guides });
+const audio = createAudio({ camera, player });
+const interact = createInteract({ scene, world, camera, player, props, lights, trees, water, sky, guides, audio });
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -85,10 +88,20 @@ document.getElementById('start').addEventListener('click', () => {
   player.enabled = true;
   timeBtn.hidden = false;
   helpBtn.hidden = false;
+  soundBtn.hidden = false;
+  audio.start();
   player.lock();
   canvas.focus();
 });
+function showSound() {
+  soundBtn.textContent = audio.muted ? '聲音：關' : '聲音：開';
+  soundBtn.setAttribute('aria-pressed', audio.muted ? 'false' : 'true');
+}
+showSound();
+function toggleSound() { audio.toggleMute(); showSound(); }
+
 timeBtn.addEventListener('click', () => { toggleTime(); timeBtn.blur(); });
+soundBtn.addEventListener('click', () => { toggleSound(); soundBtn.blur(); });
 helpBtn.addEventListener('click', () => { interact.key('KeyH'); helpBtn.blur(); });
 
 canvas.tabIndex = 0;
@@ -104,6 +117,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') toggleTime();
   if (e.code === 'KeyM') guides.toggleTop();
   if (e.code === 'KeyL') guides.toggleLabels();
+  if (e.code === 'KeyN') toggleSound();
   interact.key(e.code);
 });
 
@@ -118,6 +132,7 @@ function frame() {
   dayNight.update(dt);
   interact.update(dt);
   sky.update(dt, camera);
+  audio.update(dt, interact.mode === 'soak');
   guides.update(player, camera);
   renderer.render(scene, guides.top ? guides.topCam : camera);
   requestAnimationFrame(frame);
@@ -125,4 +140,4 @@ function frame() {
 frame();
 
 // 供自動檢查使用
-window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props, water, interact };
+window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props, water, interact, audio };

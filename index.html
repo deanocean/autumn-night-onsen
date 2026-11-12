@@ -17,9 +17,9 @@
 
 <div id="intro" class="panel">
   <div class="panel-inner">
-    <p class="eyebrow">第四階段 · 互動</p>
+    <p class="eyebrow">第五階段 · 聲音</p>
     <h1>秋夜露天風呂</h1>
-    <p class="lead">走近燈籠、木桶、長椅、楓枝與牛奶，看著它按 E。<br>走進池裡也可以按 E 泡湯。聲音在後續階段加入。</p>
+    <p class="lead">走近燈籠、木桶、長椅、楓枝與牛奶，看著它按 E。<br>走進池裡也可以按 E 泡湯。建議戴上耳機。</p>
     <dl class="keys">
       <div><dt>W A S D</dt><dd>移動</dd></div>
       <div><dt>滑鼠</dt><dd>轉動視角</dd></div>
@@ -29,13 +29,17 @@
       <div><dt>T</dt><dd>切換白天／夜晚</dd></div>
       <div><dt>M</dt><dd>鳥瞰全區</dd></div>
       <div><dt>L</dt><dd>區域標籤</dd></div>
+      <div><dt>N</dt><dd>聲音開／關</dd></div>
       <div><dt>Esc</dt><dd>釋放滑鼠</dd></div>
     </dl>
     <button id="start" type="button">進入場景</button>
   </div>
 </div>
 
-<button id="time" type="button" aria-pressed="false" hidden>切換到夜晚</button>
+<div id="topright">
+  <button id="sound" type="button" aria-pressed="true" hidden>聲音：開</button>
+  <button id="time" type="button" aria-pressed="false" hidden>切換到夜晚</button>
+</div>
 <button id="helpbtn" type="button" hidden><kbd>H</kbd>操作說明</button>
 <div id="resume" hidden>點一下畫面繼續（或按住滑鼠拖曳轉動視角）</div>
 <div id="err" hidden></div>
@@ -51,13 +55,14 @@
     <div><dt>T</dt><dd>切換白天／夜晚</dd></div>
     <div><dt>M</dt><dd>鳥瞰全區</dd></div>
     <div><dt>L</dt><dd>區域標籤</dd></div>
+    <div><dt>N</dt><dd>聲音開／關</dd></div>
     <div><dt>Esc</dt><dd>釋放滑鼠</dd></div>
   </dl>
   <h3>可以互動的東西</h3>
   <p class="note">走到兩三步內、看著它，它會微微發亮，這時按 E。</p>
   <table class="things">
     <tr><th>溫泉池</th><td>站在水深及膝以上的地方</td><td>泡湯，再按 E 起身</td></tr>
-    <tr><th>檜木桶</th><td>東屋下的池邊，小凳旁</td><td>舀水潑向池面</td></tr>
+    <tr><th>檜木桶</th><td>東屋下的池邊，小凳旁</td><td>舀水往身上淋</td></tr>
     <tr><th>燈籠</th><td>石燈籠、行燈、簷下吊燈籠、入口提燈</td><td>逐盞點燈、熄燈</td></tr>
     <tr><th>長椅</th><td>北側望景台</td><td>坐下觀星，再按 E 起身</td></tr>
     <tr><th>低垂楓枝</th><td>湯屋往池子的小徑上方</td><td>搖落紅葉</td></tr>

@@ -52,7 +52,10 @@
   - [x] 4A 植栽（使用者於 2026-11-12 確認）。`js/trees.js`：場內 7 棵楓樹（程序枝幹 + 約 3.4 萬張「楓枝」貼片）、`PROPS.mapleBranch` 的低垂枝（獨立的 mesh 與材質，`trees.low` 有 `pos`／`uShake`／`mesh` 留給 4C）、場外樹林 46 棵（杉與闊葉，大貼片包深色的芯）、落葉（地面、岩石、屋頂、水面，約 1 萬片；`trees.leafMap` 是單片楓葉貼圖，4C 飄落的葉子可用）。可調的地方：樹的主色 `TREE_HUE`、色階 `GRAD`、葉量（`createTrees` 裡的 `R.x * R.x * 400`）、落葉量（`fallenLeaves` 裡的 115 與 2600）。
   - [x] 4B 燈籠與小物（使用者於 2026-11-12 確認）。`js/props.js`：春日型石燈籠 5 座、行燈 4 盞、檜木桶＋小凳＋手巾、鹿威し、牛奶（小台上的木箱，三瓶）。`temp` 佔位群組已移除。每盞燈（含簷下吊燈籠、入口提燈）各有自己的和紙材質，把 `lights.lamps[i].on` 設成 false 就只熄那一盞（紙面與點光源一起，約 0.6 秒淡出；要立刻到位呼叫 `lights.snap()`）。留給 4C 的接口在 `createProps` 的回傳值（`window.__onsen.props`）：`lanterns[]`、`oke.group`／`oke.water`、`shishi.pivot`（竹筒轉軸，靜止角 `shishi.rest`）／`shishi.spout`（出水口，鹿威し群組的局部座標）、`milk.bottles[]`（各有 `group`／`liquid`／`glass`／`cap`）。`lights.lamps` 每筆有 `kind`（stone／andon／hanging／chochin／engawa）、`paper`（可當注視目標的 mesh）；`engawa` 兩盞是窗內透出的光，不是可熄的燈具。
   - [x] 4C 互動（使用者於 2026-11-12 實機確認）。`js/interact.js`：注視判定（視線旁 `r` 公尺內、距離 2.5 m 內，不做遮擋判斷）、被注視時微亮（燈是和紙自己變亮，其他物件疊一層加色的殼 `shell()`，楓枝用材質的 emissive）、首次提示（`#hint`）、H 說明（`#help`）。泡湯（水深 0.4 m 以上才能坐）、木桶舀水、點燈熄燈、坐下觀星、搖落紅葉、牛奶、鹿威し都已接上。可調的地方：星空變亮倍率（`update` 裡的 `1 + 1.1 * lights.dark`）、泡湯蒸氣倍率 1.7、落葉每次 26 片（`shake`）、鹿威し週期 `CYCLE`。尚未做：各互動的聲音（第五階段）。截圖測試可用 `--eval=__onsen.interact.trigger('oke')`（id：`oke`、`bench`、`leaf`、`milk0`–`2`、`lamp0`–、`soak`、`stand`）；`--eval` 會在擺好視角之前執行，要拍動畫中途就用 `setTimeout` 延後觸發。
-- [ ] 第五階段：音效、效能與整體打磨
+- [ ] 第五階段（拆成三段，使用者 2026-11-12 選定內容）
+  - [ ] 5A 音效：**已實作並 commit（2026-11-12），待使用者實機試聽**。`js/audio.js`：環境聲（湯口流水有方位、白天鳥鳴、夜晚蟲鳴、風）與部分互動聲（倒水、涉水、木地板腳步、喝）用 CC0 實錄音檔，其餘短音（鹿威し敲石、開關燈、搖枝、瓶蓋、石板腳步）用 Web Audio 合成（使用者選「混合」）。靜音是 N 鍵＋右上角按鈕，預設有聲，會記在 localStorage。聲音在按「進入場景」時才啟動。可調的地方：各層音量 `MIX`；個別互動聲的 `gain` 在檔案後半的各方法裡。**Claude 聽不到聲音**，只能用頻譜圖與音量數字挑檔、驗證；音色好不好要靠使用者回報。自動檢查：`__onsen.audio.loaded`（已載入的檔）、`__onsen.audio.debug`（`ctx`／`master`，可接 AnalyserNode 量音量）。
+  - [ ] 5B 預編譯與色調小修：開始畫面預編譯 shader（日夜兩種狀態）；夜晚障子窗偏亮、木台地板偏黃、地面的苔像草皮。
+  - [ ] 5C 北側山坡與近山（目前只是混色斑塊，工程較大，獨立一段）。
 
 第四階段已定案（使用者 2026-11-12 選定）：
 - 鹿威し：自動循環（注水、傾倒、敲石，約 12 秒一次），不需按鍵。
@@ -69,7 +72,7 @@
 | `js/env.js` | 共用狀態 `G`（時間、太陽、環境光、night、燈具位置等 uniform） |
 | `js/shaders.js` | 表面材質：在標準材質上注入 ROCK／GROUND／BASIN／STONE／WOOD／ROOF／PLASTER／BAMBOO／BARK 表面函式。ROCK／GROUND／STONE／WOOD／PLASTER 的近看細節來自 `textures/` 的實拍貼圖（三向投影，不需 UV），苔、濕潤、風化、木板接縫由程序雜訊疊加；貼圖尺寸在 `TEXTURES`、色調在 `TUNE` |
 | `textures/` | Poly Haven 的 CC0 PBR 貼圖（每組 diff／nor／rough），來源與備選見 `textures/README.md` |
-| `tools/` | 開發用截圖工具，不屬於網站本體 |
+| `tools/` | 開發用截圖工具與音檔前處理腳本，不屬於網站本體 |
 | `js/world.js` | 地形、岩石、湯屋、東屋、望景台、竹垣、簷下吊燈籠與入口提燈 |
 | `js/props.js` | 石燈籠、行燈、檜木桶與小凳、鹿威し、牛奶。零件用 `Batch` 依材質合併成少數 mesh；會動或可互動的部分保持獨立 |
 | `js/trees.js` | 楓樹、場外樹林、落葉。葉片是 InstancedMesh 貼片，貼圖畫在 canvas 上（2×2 圖集）；共用的葉片材質有微風、逆光透亮、夜晚燈火暖色；樹皮是 `shaders.js` 的 BARK |
@@ -80,7 +83,9 @@
 | `js/lights.js` | 燈具清單與點光源；每盞有 `on` 旗標與自己的和紙材質，`update()` 讓光與紙面淡入淡出；可熄的燈全熄時窗內的光（`G.house`）也暗下來 |
 | `js/labels.js` | 區域標籤（L）與鳥瞰（M） |
 | `js/player.js` | 第一人稱移動與碰撞；`eyeTarget`／`frozen`／`anchor` 是坐下、泡湯用的姿勢狀態 |
-| `js/interact.js` | 互動：注視判定、微亮、提示與說明、各項互動的動畫、鹿威し循環、水珠粒子、飄落的葉子 |
+| `js/interact.js` | 互動：注視判定、微亮、提示與說明、各項互動的動畫、鹿威し循環、水珠粒子、飄落的葉子；在動畫的時間點呼叫 `audio` |
+| `js/audio.js` | 聲音：環境聲循環、依日夜與泡湯狀態混音、腳步（依走過的距離與腳下材質）、各互動的短音、靜音 |
+| `audio/` | Freesound 的 CC0 錄音處理成的 AAC（.m4a），來源與格式約定見 `audio/README.md`；重做用 `tools/audio-prep.py` |
 | `js/main.js` | 組裝與主迴圈 |
 
 ## 技術備註
