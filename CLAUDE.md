@@ -49,15 +49,17 @@
 - [x] 第二階段：水、蒸氣、岩石與建築材質
 - [x] 第三階段：天空、日夜切換、星空與銀河；湯屋改建；基本燈光；材質改用實拍 PBR 貼圖（使用者於 2026-11-11 確認）。留給後面的事：北側山坡與近山只是混色斑塊；夜晚障子窗偏亮、木台地板偏黃、地面的苔略像草皮（使用者未要求改，第五階段打磨時再看）。
 - [ ] 第四階段（拆成四段，**每段一個 session**，做完 commit、請使用者截圖確認再往下）
-  - [ ] 4A 植栽：**已實作並 commit（2026-11-12），待使用者截圖確認**。`js/trees.js`：場內 7 棵楓樹（程序枝幹 + 約 3.4 萬張「楓枝」貼片）、`PROPS.mapleBranch` 的低垂枝（獨立的 mesh 與材質，`trees.low` 有 `pos`／`uShake`／`mesh` 留給 4C）、場外樹林 46 棵（杉與闊葉，大貼片包深色的芯）、落葉（地面、岩石、屋頂、水面，約 1 萬片；`trees.leafMap` 是單片楓葉貼圖，4C 飄落的葉子可用）。可調的地方：樹的主色 `TREE_HUE`、色階 `GRAD`、葉量（`createTrees` 裡的 `R.x * R.x * 400`）、落葉量（`fallenLeaves` 裡的 115 與 2600）。
-  - [ ] 4B 燈籠與小物：**已實作並 commit（2026-11-12），待使用者截圖確認**。`js/props.js`：春日型石燈籠 5 座、行燈 4 盞、檜木桶＋小凳＋手巾、鹿威し、牛奶（小台上的木箱，三瓶）。`temp` 佔位群組已移除。每盞燈（含簷下吊燈籠、入口提燈）各有自己的和紙材質，`lights.lamps[i].on = false; lights.sync()` 就只熄那一盞（紙面與點光源一起）。留給 4C 的接口在 `createProps` 的回傳值（`window.__onsen.props`）：`lanterns[]`、`oke.group`／`oke.water`、`shishi.pivot`（竹筒轉軸，靜止角 `shishi.rest`）／`shishi.spout`（出水口，鹿威し群組的局部座標）、`milk.bottles[]`（各有 `group`／`liquid`／`glass`／`cap`）。`lights.lamps` 每筆有 `kind`（stone／andon／hanging／chochin／engawa）、`paper`（可當注視目標的 mesh）；`engawa` 兩盞是窗內透出的光，不是可熄的燈具。
-  - [ ] 4C 互動：新增 `js/interact.js`。框架（視線 + 距離約 2.5 m 判定注視目標、物件自身微亮、首次提示、H 說明、E 互動）+ 互動清單六項 + 鹿威し與牛奶。
+  - [x] 4A 植栽（使用者於 2026-11-12 確認）。`js/trees.js`：場內 7 棵楓樹（程序枝幹 + 約 3.4 萬張「楓枝」貼片）、`PROPS.mapleBranch` 的低垂枝（獨立的 mesh 與材質，`trees.low` 有 `pos`／`uShake`／`mesh` 留給 4C）、場外樹林 46 棵（杉與闊葉，大貼片包深色的芯）、落葉（地面、岩石、屋頂、水面，約 1 萬片；`trees.leafMap` 是單片楓葉貼圖，4C 飄落的葉子可用）。可調的地方：樹的主色 `TREE_HUE`、色階 `GRAD`、葉量（`createTrees` 裡的 `R.x * R.x * 400`）、落葉量（`fallenLeaves` 裡的 115 與 2600）。
+  - [x] 4B 燈籠與小物（使用者於 2026-11-12 確認）。`js/props.js`：春日型石燈籠 5 座、行燈 4 盞、檜木桶＋小凳＋手巾、鹿威し、牛奶（小台上的木箱，三瓶）。`temp` 佔位群組已移除。每盞燈（含簷下吊燈籠、入口提燈）各有自己的和紙材質，把 `lights.lamps[i].on` 設成 false 就只熄那一盞（紙面與點光源一起，約 0.6 秒淡出；要立刻到位呼叫 `lights.snap()`）。留給 4C 的接口在 `createProps` 的回傳值（`window.__onsen.props`）：`lanterns[]`、`oke.group`／`oke.water`、`shishi.pivot`（竹筒轉軸，靜止角 `shishi.rest`）／`shishi.spout`（出水口，鹿威し群組的局部座標）、`milk.bottles[]`（各有 `group`／`liquid`／`glass`／`cap`）。`lights.lamps` 每筆有 `kind`（stone／andon／hanging／chochin／engawa）、`paper`（可當注視目標的 mesh）；`engawa` 兩盞是窗內透出的光，不是可熄的燈具。
+  - [ ] 4C 互動：**已實作並 commit（2026-11-12），待使用者實機確認**。`js/interact.js`：注視判定（視線旁 `r` 公尺內、距離 2.5 m 內，不做遮擋判斷）、被注視時微亮（燈是和紙自己變亮，其他物件疊一層加色的殼 `shell()`，楓枝用材質的 emissive）、首次提示（`#hint`）、H 說明（`#help`）。泡湯（水深 0.4 m 以上才能坐）、木桶舀水、點燈熄燈、坐下觀星、搖落紅葉、牛奶、鹿威し都已接上。可調的地方：星空變亮倍率（`update` 裡的 `1 + 1.1 * lights.dark`）、泡湯蒸氣倍率 1.7、落葉每次 26 片（`shake`）、鹿威し週期 `CYCLE`。尚未做：各互動的聲音（第五階段）。截圖測試可用 `--eval=__onsen.interact.trigger('oke')`（id：`oke`、`bench`、`leaf`、`milk0`–`2`、`lamp0`–、`soak`、`stand`）；`--eval` 會在擺好視角之前執行，要拍動畫中途就用 `setTimeout` 延後觸發。
   - [ ] 4D 拍照模式：新增 `js/photo.js`。
 - [ ] 第五階段：音效、效能與整體打磨
 
+第四階段已定案（使用者 2026-11-12 選定）：
+- 鹿威し：自動循環（注水、傾倒、敲石，約 12 秒一次），不需按鍵。
+- 牛奶：注視哪一瓶就拿哪一瓶，拿到眼前仰頭喝，空瓶放回；三瓶各喝一次，不補滿。
+
 第四階段尚未定案（到該段之前再問使用者）：
-- 鹿威し：提案為自動循環（注水、傾倒、敲石，約 12 秒一次），不需按鍵。
-- 牛奶：提案為按 E 拿起來喝，視線微仰、瓶子變空放回。
 - 拍照模式按鍵：提案為 P 進入、滾輪調視野、Q／E 傾斜、Enter 存 PNG、Esc 離開。
 
 使用者已確認：整體配置、池的大小、湯色與濃度、蒸氣量。
@@ -79,9 +81,10 @@
 | `js/steam.js` | 蒸氣粒子（無狀態，位置由時間算出） |
 | `js/sky.js` | 天球、亮星、銀河、流星、遠山、谷底燈火 |
 | `js/daynight.js` | 日夜內插（白天／黃昏／夜晚三組關鍵色） |
-| `js/lights.js` | 燈具清單與點光源；每盞有 `on` 旗標與自己的和紙材質，`sync()` 一起更新光與紙面 |
+| `js/lights.js` | 燈具清單與點光源；每盞有 `on` 旗標與自己的和紙材質，`update()` 讓光與紙面淡入淡出；可熄的燈全熄時窗內的光（`G.house`）也暗下來 |
 | `js/labels.js` | 區域標籤（L）與鳥瞰（M） |
-| `js/player.js` | 第一人稱移動與碰撞 |
+| `js/player.js` | 第一人稱移動與碰撞；`eyeTarget`／`frozen`／`anchor` 是坐下、泡湯用的姿勢狀態 |
+| `js/interact.js` | 互動：注視判定、微亮、提示與說明、各項互動的動畫、鹿威し循環、水珠粒子、飄落的葉子 |
 | `js/main.js` | 組裝與主迴圈 |
 
 ## 技術備註

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import * as L from './layout.js';
 import { patch } from './shaders.js';
+import { G } from './env.js';
 
 const std = (o = {}) => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, ...o });
 
@@ -233,7 +234,11 @@ export function buildWorld(scene) {
   const paperMap = paperTexture();
   const SHOJI = new THREE.MeshStandardMaterial({ color: 0xf3e3c2, map: paperMap, emissive: 0xffc27a, emissiveMap: paperMap, emissiveIntensity: M.paper.emissiveIntensity, roughness: 1 });
   // 夜間發光強度由 daynight.js 驅動 M.paper；窗紙用 getter 直接跟著它（不必改 daynight.js）
-  Object.defineProperty(SHOJI, 'emissiveIntensity', { get: () => M.paper.emissiveIntensity, set() {}, configurable: true });
+  // G.house 降到 0（場內的燈全熄）時，窗內也只剩一點餘光
+  Object.defineProperty(SHOJI, 'emissiveIntensity', {
+    get: () => { const e = M.paper.emissiveIntensity, h = G.house.value; return e * h + Math.min(e, 0.12) * (1 - 0.75 * G.night.value) * (1 - h); },
+    set() {}, configurable: true,
+  });
   const world = new THREE.Group();
   scene.add(world);
   const rand = rng(20261110);

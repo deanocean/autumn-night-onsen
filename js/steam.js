@@ -35,7 +35,7 @@ void main(){
 }`;
 
 const frag = /* glsl */ `
-uniform float uTime; uniform vec3 uColor; uniform vec3 uLampCol; uniform float uDensity;
+uniform float uTime; uniform vec3 uColor; uniform vec3 uLampCol; uniform float uDensity, uBoost;
 varying vec2 vUv; varying float vAlpha; varying float vPhase; varying float vGlow;
 ${GLSL_NOISE}
 void main(){
@@ -43,7 +43,7 @@ void main(){
   if (d > 1.0) discard;
   float n = fbm(vec3(vUv * 1.4 + vPhase, uTime * 0.12 + vPhase));
   float a = (1.0 - smoothstep(0.15, 1.0, d)) * smoothstep(0.25, 0.75, n);
-  gl_FragColor = vec4((uColor + uLampCol * vGlow * 1.6) * (0.85 + 0.3 * n), a * vAlpha * uDensity);
+  gl_FragColor = vec4((uColor + uLampCol * vGlow * 1.6) * (0.85 + 0.3 * n), a * vAlpha * uDensity * uBoost);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -79,7 +79,7 @@ export function createSteam(scene) {
   geo.instanceCount = count;
   const material = new THREE.ShaderMaterial({
     uniforms: {
-      uTime: G.uTime, uColor: G.steamCol, uLampCol: G.lampCol, uLampPos: G.lampPos, uDensity: G.steamDensity,
+      uTime: G.uTime, uColor: G.steamCol, uLampCol: G.lampCol, uLampPos: G.lampPos, uDensity: G.steamDensity, uBoost: G.steamBoost,
       uWind: { value: new THREE.Vector2(0.35, -0.2) },
     },
     vertexShader: vert, fragmentShader: frag,

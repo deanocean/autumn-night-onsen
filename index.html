@@ -17,13 +17,15 @@
 
 <div id="intro" class="panel">
   <div class="panel-inner">
-    <p class="eyebrow">第四階段 · 植栽</p>
+    <p class="eyebrow">第四階段 · 互動</p>
     <h1>秋夜露天風呂</h1>
-    <p class="lead">湯、蒸氣、建築、天空與紅葉已完成，可切換白天與夜晚。<br>燈籠與小物仍是簡化版；互動與聲音在後續階段加入。</p>
+    <p class="lead">走近燈籠、木桶、長椅、楓枝與牛奶，看著它按 E。<br>走進池裡也可以按 E 泡湯。聲音在後續階段加入。</p>
     <dl class="keys">
       <div><dt>W A S D</dt><dd>移動</dd></div>
       <div><dt>滑鼠</dt><dd>轉動視角</dd></div>
       <div><dt>Shift</dt><dd>快走</dd></div>
+      <div><dt>E</dt><dd>與注視的東西互動</dd></div>
+      <div><dt>H</dt><dd>操作說明</dd></div>
       <div><dt>T</dt><dd>切換白天／夜晚</dd></div>
       <div><dt>M</dt><dd>鳥瞰全區</dd></div>
       <div><dt>L</dt><dd>區域標籤</dd></div>
@@ -36,6 +38,23 @@
 <button id="time" type="button" aria-pressed="false" hidden>切換到夜晚</button>
 <div id="resume" hidden>點一下畫面繼續（或按住滑鼠拖曳轉動視角）</div>
 <div id="err" hidden></div>
+<div id="hint" aria-live="polite"></div>
+
+<div id="help" hidden>
+  <h2>操作說明</h2>
+  <dl class="keys">
+    <div><dt>W A S D</dt><dd>移動</dd></div>
+    <div><dt>滑鼠</dt><dd>轉動視角</dd></div>
+    <div><dt>Shift</dt><dd>快走</dd></div>
+    <div><dt>E</dt><dd>與注視的東西互動</dd></div>
+    <div><dt>T</dt><dd>切換白天／夜晚</dd></div>
+    <div><dt>M</dt><dd>鳥瞰全區</dd></div>
+    <div><dt>L</dt><dd>區域標籤</dd></div>
+    <div><dt>Esc</dt><dd>釋放滑鼠</dd></div>
+  </dl>
+  <p>可以互動的東西被看著時會微微發亮：<br>燈籠與行燈（點燈、熄燈）、檜木桶（舀水）、望景台長椅（坐下觀星）、<br>小徑上方的低垂楓枝（搖落紅葉）、簷廊的牛奶。站在池裡按 E 可以泡湯。<br>夜裡把燈全部熄掉，星空會慢慢亮起來。</p>
+  <p class="close">按 H 關閉</p>
+</div>
 
 <script type="module" src="js/main.js"></script>
 </body>

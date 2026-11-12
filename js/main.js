@@ -9,6 +9,7 @@ import { createLights } from './lights.js';
 import { createDayNight } from './daynight.js';
 import { createGuides } from './labels.js';
 import { Player } from './player.js';
+import { createInteract } from './interact.js';
 import { G } from './env.js';
 
 const canvas = document.getElementById('scene');
@@ -59,6 +60,7 @@ const lights = createLights(scene, props.lanterns, lamps);
 const dayNight = createDayNight({ scene, renderer, sun, hemi, sky, lights });
 const guides = createGuides(scene);
 const player = new Player(camera, canvas);
+const interact = createInteract({ scene, world, camera, player, props, lights, trees, water, sky, guides });
 
 function resize() {
   const w = innerWidth, h = innerHeight;
@@ -99,6 +101,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') toggleTime();
   if (e.code === 'KeyM') guides.toggleTop();
   if (e.code === 'KeyL') guides.toggleLabels();
+  interact.key(e.code);
 });
 
 const clock = new THREE.Clock();
@@ -110,6 +113,7 @@ function frame() {
   if (player.wading) water.wade(player.pos.x, player.pos.z, Math.hypot(player.vel.x, player.vel.y));
   water.update(dt);
   dayNight.update(dt);
+  interact.update(dt);
   sky.update(dt, camera);
   guides.update(player, camera);
   renderer.render(scene, guides.top ? guides.topCam : camera);
@@ -118,4 +122,4 @@ function frame() {
 frame();
 
 // 供自動檢查使用
-window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props };
+window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props, water, interact };

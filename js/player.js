@@ -17,6 +17,11 @@ export class Player {
     this.dragging = false;
     this.bob = 0;
     this.wading = false;
+    // 坐下、泡湯等姿勢（由 interact.js 設定）
+    this.eye = EYE;        // 目前的視線高度（相對腳下）
+    this.eyeTarget = null; // 要降到的視線高度；null = 站立
+    this.frozen = false;   // 不能走動（仍可轉頭）
+    this.anchor = null;    // { x, z, release }：被帶往這個位置，不做碰撞；release 為 true 時到位後放開
 
     addEventListener('keydown', (e) => {
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
@@ -49,7 +54,7 @@ export class Player {
     const k = this.keys;
     let f = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
     let s = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    if (!this.enabled) { f = 0; s = 0; }
+    if (!this.enabled || this.frozen || this.anchor) { f = 0; s = 0; }
     const len = Math.hypot(f, s) || 1;
     f /= len; s /= len;
 
@@ -67,7 +72,14 @@ export class Player {
     let x = this.pos.x + this.vel.x * dt;
     let z = this.pos.z + this.vel.y * dt;
 
-    for (let pass = 0; pass < 2; pass++) {
+    if (this.anchor) {
+      const a = this.anchor, e = 1 - Math.exp(-dt * 5);
+      this.vel.set(0, 0);
+      x = this.pos.x + (a.x - this.pos.x) * e;
+      z = this.pos.z + (a.z - this.pos.z) * e;
+      if (a.release && Math.hypot(a.x - x, a.z - z) < 0.04) this.anchor = null;
+    }
+    for (let pass = 0; pass < 2 && !this.anchor; pass++) {
       for (const c of circles) {
         const dx = x - c.x, dz = z - c.z;
         const min = c.r + RADIUS;
@@ -110,7 +122,8 @@ export class Player {
     this.bob += dt * moving * 3.1;
     const bobY = Math.sin(this.bob * 2) * 0.022 * Math.min(1, moving / 2);
 
-    this.camera.position.set(x, this.pos.y + EYE + bobY, z);
+    this.eye += ((this.eyeTarget ?? EYE) - this.eye) * (1 - Math.exp(-dt * 3.5));
+    this.camera.position.set(x, this.pos.y + this.eye + bobY, z);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
   }
 
