@@ -16,8 +16,8 @@ const MIX = {
   master: 0.9,
   stream: 1.5,     // 湯口（有方位，越近越大聲）
   soak: 0.42,      // 泡湯時貼在耳邊的水聲
-  birds: 0.5,
-  crickets: 0.36,
+  birds: 0.6,
+  crickets: 0.3,
   wind: 0.26,
   steps: 0.32,
 };
@@ -152,9 +152,10 @@ export function createAudio({ camera, player }) {
       slot('step_wood', { gain: v * 0.9, rate: 0.9 + rnd() * 0.2 });
     } else {
       // 石板與土：赤腳，很輕的一聲
-      tone({ freq: 95 + rnd() * 20, freqEnd: 52, dur: 0.09, gain: v * 0.5 });
-      burst({ type: 'lowpass', freq: 700 + rnd() * 300, q: 0.5, dur: 0.07, gain: v * 0.35 });
-      burst({ freq: 2600 + rnd() * 900, q: 0.8, dur: 0.035, gain: v * 0.07 });
+      // 以腳掌貼地的沙沙聲為主，低頻的「咚」只留一點，起音放慢才不會硬
+      tone({ freq: 170 + rnd() * 30, freqEnd: 120, dur: 0.06, attack: 0.012, gain: v * 0.12 });
+      burst({ freq: 1100 + rnd() * 400, q: 0.6, dur: 0.11, attack: 0.014, gain: v * 0.4 });
+      burst({ type: 'highpass', freq: 3200 + rnd() * 800, q: 0.5, dur: 0.06, attack: 0.01, gain: v * 0.05 });
     }
   }
 
