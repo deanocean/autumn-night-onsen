@@ -10,7 +10,7 @@
 - 預覽：在本資料夾執行 `npx serve` 或 `python3 -m http.server 8000`，用瀏覽器開 localhost。**不能直接雙擊 index.html**（importmap／ES modules 在 `file://` 下會被瀏覽器擋掉）。
 - Three.js 0.170 由 jsdelivr CDN 以 importmap 載入（含 `three/addons/`），預覽時需要網路。
 - 版本管理用 git：每完成一個段落就 commit。
-- **自己看畫面**：`node tools/shot.js [--night] 名稱:x,z,yaw,pitch ...`（無頭 Chrome，自己起伺服器；輸出在 `tools/shots/`，不進版本庫；首次使用先 `cd tools && npm install`）。yaw 0 朝北、π 朝南；不給視角時拍預設五張。改完畫面相關的東西一定要自己拍照檢查，白天與夜晚都看；終端若印出 `pageerror`／`console error` 代表程式壞了。原圖是 3200×1800，檢視前先用 `sips -Z 1300` 縮小。
+- **自己看畫面**：`node tools/shot.js [--night] [--top] 名稱:x,z,yaw,pitch ...`（無頭 Chrome，自己起伺服器；輸出在 `tools/shots/`，不進版本庫；首次使用先 `cd tools && npm install`）。yaw 0 朝北、π 朝南、正值往左（西）轉；`--top` 拍鳥瞰；不給視角時拍預設五張。改完畫面相關的東西一定要自己拍照檢查，白天與夜晚都看；終端若印出 `pageerror`／`console error` 代表程式壞了。原圖是 3200×1800，檢視前先用 `sips -Z 1300` 縮小。
 - 使用者也會用截圖回報畫面問題。
 - 設計參考圖在 `reference/`（onsen01–05）。
 
@@ -47,9 +47,9 @@
 
 - [x] 第一階段：配置與移動
 - [x] 第二階段：水、蒸氣、岩石與建築材質
-- [x] 第三階段：天空、日夜切換、星空與銀河；湯屋改建；基本燈光；材質改用實拍 PBR 貼圖（使用者於 2026-11-11 確認）。留給後面的事：北側山坡與近山只是混色斑塊（等 4A 種樹）；地面落葉由 4A 鋪真葉片；`world.js` 的舊 `ridge()` 已無人使用；夜晚障子窗偏亮、木台地板偏黃、地面的苔略像草皮（使用者未要求改，第五階段打磨時再看）。
+- [x] 第三階段：天空、日夜切換、星空與銀河；湯屋改建；基本燈光；材質改用實拍 PBR 貼圖（使用者於 2026-11-11 確認）。留給後面的事：北側山坡與近山只是混色斑塊；夜晚障子窗偏亮、木台地板偏黃、地面的苔略像草皮（使用者未要求改，第五階段打磨時再看）。
 - [ ] 第四階段（拆成四段，**每段一個 session**，做完 commit、請使用者截圖確認再往下）
-  - [ ] 4A 植栽：新增 `js/trees.js`，移除 `world.js` 的佔位樹。場內 7 棵楓樹（程序生成的彎曲枝幹 + InstancedMesh 楓葉形貼片，紅／朱／橙／金混色，頂點 shader 微風搖曳，夜晚受 `G.lampPos` 染暖色）；`PROPS.mapleBranch` 的低垂枝（留給搖落紅葉）；場外樹林約 46 棵（杉木與闊葉、較省的做法）；地面、岩石與池面的靜態落葉；樹冠在鳥瞰時照舊隱藏。
+  - [ ] 4A 植栽：**已實作並 commit（2026-11-12），待使用者截圖確認**。`js/trees.js`：場內 7 棵楓樹（程序枝幹 + 約 3.4 萬張「楓枝」貼片）、`PROPS.mapleBranch` 的低垂枝（獨立的 mesh 與材質，`trees.low` 有 `pos`／`uShake`／`mesh` 留給 4C）、場外樹林 46 棵（杉與闊葉，大貼片包深色的芯）、落葉（地面、岩石、屋頂、水面，約 1 萬片；`trees.leafMap` 是單片楓葉貼圖，4C 飄落的葉子可用）。可調的地方：樹的主色 `TREE_HUE`、色階 `GRAD`、葉量（`createTrees` 裡的 `R.x * R.x * 400`）、落葉量（`fallenLeaves` 裡的 115 與 2600）。
   - [ ] 4B 燈籠與小物：新增 `js/props.js`，移除其餘佔位物。春日型石燈籠（基礎、竿、中台、火袋、笠、寶珠）、行燈（木格 + 和紙）、檜木桶（桶板、銅箍、手巾、小凳）、鹿威し（竹筒、支架、注水竹管、蹲踞石缽）、牛奶（玻璃瓶 + 小木箱）。每盞燈的發光材質要各自獨立（目前共用 `M.paper`，無法逐盞熄滅）。
   - [ ] 4C 互動：新增 `js/interact.js`。框架（視線 + 距離約 2.5 m 判定注視目標、物件自身微亮、首次提示、H 說明、E 互動）+ 互動清單六項 + 鹿威し與牛奶。
   - [ ] 4D 拍照模式：新增 `js/photo.js`。
@@ -69,10 +69,11 @@
 |---|---|
 | `js/layout.js` | 平面圖：所有位置、尺寸、碰撞體、地面高度、標籤文字。改配置只改這裡 |
 | `js/env.js` | 共用狀態 `G`（時間、太陽、環境光、night、燈具位置等 uniform） |
-| `js/shaders.js` | 表面材質：在標準材質上注入 ROCK／GROUND／BASIN／STONE／WOOD／ROOF／PLASTER／BAMBOO 表面函式。ROCK／GROUND／STONE／WOOD／PLASTER 的近看細節來自 `textures/` 的實拍貼圖（三向投影，不需 UV），苔、濕潤、風化、木板接縫由程序雜訊疊加；貼圖尺寸在 `TEXTURES`、色調在 `TUNE` |
+| `js/shaders.js` | 表面材質：在標準材質上注入 ROCK／GROUND／BASIN／STONE／WOOD／ROOF／PLASTER／BAMBOO／BARK 表面函式。ROCK／GROUND／STONE／WOOD／PLASTER 的近看細節來自 `textures/` 的實拍貼圖（三向投影，不需 UV），苔、濕潤、風化、木板接縫由程序雜訊疊加；貼圖尺寸在 `TEXTURES`、色調在 `TUNE` |
 | `textures/` | Poly Haven 的 CC0 PBR 貼圖（每組 diff／nor／rough），來源與備選見 `textures/README.md` |
 | `tools/` | 開發用截圖工具，不屬於網站本體 |
-| `js/world.js` | 地形、岩石、湯屋、東屋、望景台、竹垣；`temp` 群組內是待替換的佔位物件 |
+| `js/world.js` | 地形、岩石、湯屋、東屋、望景台、竹垣；`temp` 群組內是待替換的佔位物件（燈籠與小物） |
+| `js/trees.js` | 楓樹、場外樹林、落葉。葉片是 InstancedMesh 貼片，貼圖畫在 canvas 上（2×2 圖集）；共用的葉片材質有微風、逆光透亮、夜晚燈火暖色；樹皮是 `shaders.js` 的 BARK |
 | `js/water.js` | 水面（three 的 Reflector 平面反射 + 自訂 shader）、漣漪、湯口水柱 |
 | `js/steam.js` | 蒸氣粒子（無狀態，位置由時間算出） |
 | `js/sky.js` | 天球、亮星、銀河、流星、遠山、谷底燈火 |
@@ -86,4 +87,4 @@
 
 - GLSL 裡邊界反向的 smoothstep 行為未定義，一律用自訂的 `rs()`。
 - 滑鼠鎖定只能在點擊事件中請求；被拒時可按住拖曳轉視角。
-- 尚未在實機量過流暢度。若卡頓，優先降低水面反射解析度與點光源數量（目前 11 盞）。
+- 尚未在實機量過流暢度。若卡頓，優先降低水面反射解析度與點光源數量（目前 11 盞）；其次是楓葉貼片數（主畫面、水面倒影、陰影各畫一次）。

@@ -1,6 +1,6 @@
 // 開發用：用無頭 Chrome 開啟場景並截圖，讓 Claude 不必請使用者截圖就能看畫面。
 // 首次使用：cd tools && npm install
-// 用法：node tools/shot.js [--night] [--w=1600 --h=900] 名稱:x,z,yaw,pitch [...]
+// 用法：node tools/shot.js [--night] [--top] [--w=1600 --h=900] 名稱:x,z,yaw,pitch [...]
 //   yaw 0 朝北（-z，山谷），Math.PI 朝南（湯屋）；pitch 正值仰、負值俯。
 //   不給視角時拍預設的五張。輸出在 tools/shots/（不進版本庫）。
 const http = require('http');
@@ -26,6 +26,7 @@ const DEFAULTS = [
 const args = process.argv.slice(2);
 const flag = (k, d) => { const a = args.find((s) => s.startsWith(`--${k}=`)); return a ? Number(a.split('=')[1]) : d; };
 const night = args.includes('--night');
+const top = args.includes('--top'); // 鳥瞰（等同按 M）
 const W = flag('w', 1600), H = flag('h', 900);
 let views = args.filter((s) => !s.startsWith('--')).map((s) => {
   const [name, rest] = s.split(':');
@@ -65,6 +66,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.click('#start');
     await wait(1500);
     if (night) { await page.evaluate(() => window.__onsen.dayNight.toggle()); await wait(7500); }
+    if (top) await page.evaluate(() => window.__onsen.guides.setTop(true));
     for (const [name, x, z, yaw, pitch] of views) {
       await page.evaluate((x, z, yaw, pitch) => {
         const pl = window.__onsen.player;

@@ -1,5 +1,5 @@
 // 把 layout.js 的平面圖蓋成實際的場景：地形、岩石、湯屋、東屋、望景台、竹垣。
-// 樹、燈籠與小物目前仍是簡化版，第四階段再換成精細模型。
+// 樹在 trees.js；燈籠與小物目前仍是簡化版（temp 群組），4B 再換成精細模型。
 import * as THREE from 'three';
 import * as L from './layout.js';
 import { patch } from './shaders.js';
@@ -16,12 +16,6 @@ const M = {
   bamboo: patch(std(), 'BAMBOO'),
   paper: std({ color: 0xf3e3c2, emissive: 0xffc27a, emissiveIntensity: 0.12, roughness: 1 }),
   dark: std({ color: 0x0c0a09, roughness: 1 }),
-  // 以下為暫用的簡化材質
-  leaf: std({ color: 0xc65a2e, flatShading: true }),
-  leafGold: std({ color: 0xd9993a, flatShading: true }),
-  evergreen: std({ color: 0x3f5a44, flatShading: true }),
-  trunk: std({ color: 0x3a2b22, flatShading: true }),
-  hill: std({ color: 0x9a5a34, flatShading: true }),
 };
 export const MATERIALS = M;
 
@@ -54,7 +48,7 @@ function wbox(g, w, h, d, x, y, z, color = CEDAR_DARK, o = {}) {
 }
 const cyl = (g, r0, r1, h, x, y, z, m, seg = 12) => mesh(g, new THREE.CylinderGeometry(r0, r1, h, seg), m, x, y, z);
 
-function rng(seed) {
+export function rng(seed) {
   let s = seed >>> 0;
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
@@ -69,7 +63,7 @@ function vnoise(x, y, z) {
   return l(l(l(h3(ix, iy, iz), h3(ix + 1, iy, iz), fx), l(h3(ix, iy + 1, iz), h3(ix + 1, iy + 1, iz), fx), fy),
            l(l(h3(ix, iy, iz + 1), h3(ix + 1, iy, iz + 1), fx), l(h3(ix, iy + 1, iz + 1), h3(ix + 1, iy + 1, iz + 1), fx), fy), fz);
 }
-const fbm = (x, y, z) => 0.5 * vnoise(x, y, z) + 0.25 * vnoise(x * 2.1 + 3, y * 2.1 + 7, z * 2.1 + 1) + 0.125 * vnoise(x * 4.3 + 9, y * 4.3 + 2, z * 4.3 + 5);
+export const fbm = (x, y, z) => 0.5 * vnoise(x, y, z) + 0.25 * vnoise(x * 2.1 + 3, y * 2.1 + 7, z * 2.1 + 1) + 0.125 * vnoise(x * 4.3 + 9, y * 4.3 + 2, z * 4.3 + 5);
 
 // 岩石：球體先用雜訊推出起伏，再用幾個隨機平面「削」出稜角
 function rockGeometry(rand, detail = 28) {
@@ -232,22 +226,6 @@ function forestRidge(g, radius, y0, heightAt, a0, a1, seg = 200, rows = 28) {
   geo.setIndex(idx);
   geo.computeVertexNormals();
   g.add(new THREE.Mesh(geo, forestMat()));
-}
-
-function ridge(g, radius, y0, heightAt, m, a0 = 0, a1 = Math.PI * 2, seg = 96) {
-  const pos = [], idx = [];
-  for (let i = 0; i <= seg; i++) {
-    const a = a0 + ((a1 - a0) * i) / seg;
-    const x = Math.cos(a) * radius, z = Math.sin(a) * radius;
-    pos.push(x, y0, z, x, y0 + heightAt(a), z);
-    if (i < seg) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  m.side = THREE.DoubleSide;
-  g.add(new THREE.Mesh(geo, m));
 }
 
 export function buildWorld(scene) {
@@ -594,25 +572,6 @@ export function buildWorld(scene) {
   // ---------- 以下為暫用的簡化物件（第四階段替換） ----------
   const temp = new THREE.Group();
   world.add(temp);
-  L.MAPLES.forEach(([x, z, h, r], i) => {
-    cyl(temp, 0.14, 0.26, h * 0.62, x, h * 0.31, z, M.trunk, 7).rotation.z = (rand() - 0.5) * 0.16;
-    for (let k = 0; k < 5; k++) {
-      const s = mesh(temp, new THREE.IcosahedronGeometry(r * (0.42 + rand() * 0.22), 1), i % 3 === 1 ? M.leafGold : M.leaf,
-        x + (rand() - 0.5) * r * 1.3, h * (0.62 + rand() * 0.3), z + (rand() - 0.5) * r * 1.3);
-      s.scale.y = 0.6;
-      OVERHEAD.push(s);
-    }
-  });
-  for (let i = 0; i < 46; i++) {
-    const side = i % 3;
-    const x = side === 0 ? 16 + rand() * 12 : side === 1 ? -16 - rand() * 12 : -22 + rand() * 44;
-    const z = side === 2 ? 19 + rand() * 12 : -12 + rand() * 30;
-    const h = 7 + rand() * 6;
-    cyl(temp, 0.18, 0.3, h * 0.6, x, h * 0.3, z, M.trunk, 6);
-    const pick = rand();
-    const c = mesh(temp, new THREE.IcosahedronGeometry(2.4 + rand() * 1.8, 1), pick < 0.45 ? M.leaf : pick < 0.75 ? M.leafGold : M.evergreen, x, h * 0.8, z);
-    c.scale.y = 0.75;
-  }
   L.LANTERNS.forEach(([x, z, kind]) => {
     const y0 = L.groundY(x, z);
     if (kind === 'stone') {

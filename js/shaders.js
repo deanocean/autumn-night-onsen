@@ -177,6 +177,19 @@ const MODES = {
       c = mix(c, mix(vec3(0.60, 0.10, 0.04), vec3(0.85, 0.48, 0.08), fract(v.z * 31.0)), leaf);
       r = 0.95;
     }`,
+  BARK: /* glsl */ `
+    // 樹皮：灰褐色、縱向的淺溝，朝上的面長苔，零星的地衣
+    float surfH(vec3 wp, vec3 op){ return fbm2(wp * vec3(24.0, 3.0, 24.0)) * 0.006; }
+    void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
+      float lum = clamp(dot(gA, vec3(0.333)) / dot(uMean, vec3(0.333)), 0.35, 2.0);
+      c = vec3(0.105, 0.088, 0.075) * lum;
+      c *= 0.7 + 0.6 * fbm2(wp * vec3(10.0, 1.5, 10.0));
+      float li = rs(0.56, 0.68, fbm(wp * 4.0 + 3.0));
+      c = mix(c, vec3(0.26, 0.28, 0.23) * lum, li * 0.4);
+      float moss = rs(0.0, 0.8, n.y) * rs(0.40, 0.58, fbm(wp * 2.2 + 5.0));
+      c = mix(c, vec3(0.085, 0.115, 0.035) * (0.6 + 0.8 * vnoise(wp * 90.0)), moss * 0.85);
+      r = mix(max(gR, 0.8), 1.0, moss);
+    }`,
   PLASTER: /* glsl */ `
     float surfH(vec3 wp, vec3 op){ return fbm2(wp * 9.0) * 0.002; }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
@@ -234,6 +247,7 @@ const TEX_USE = {
   STONE: { slot: 'stone', nstr: 1.0 },
   WOOD: { slot: 'wood', nstr: 1.2, object: true },
   PLASTER: { slot: 'plaster', nstr: 0.7 },
+  BARK: { slot: 'rock', nstr: 1.1 },
 };
 const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25' };
 
