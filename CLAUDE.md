@@ -10,6 +10,7 @@
 - 預覽：在本資料夾執行 `npx serve` 或 `python3 -m http.server 8000`，用瀏覽器開 localhost。**不能直接雙擊 index.html**（importmap／ES modules 在 `file://` 下會被瀏覽器擋掉）。
 - Three.js 0.170 由 jsdelivr CDN 以 importmap 載入（含 `three/addons/`），預覽時需要網路。
 - 版本管理用 git：每完成一個段落就 commit。
+- **量卡頓**：`node tools/perf.js`（進場與日夜切換時超過 40 ms 的畫格、已編譯的 shader 數）。
 - **自己看畫面**：`node tools/shot.js [--night] [--top] 名稱:x,z,yaw,pitch ...`（無頭 Chrome，自己起伺服器；輸出在 `tools/shots/`，不進版本庫；首次使用先 `cd tools && npm install`）。yaw 0 朝北、π 朝南、正值往左（西）轉；`--top` 拍鳥瞰；`--eval=程式碼` 會在拍照前於頁面內執行（例如熄燈、`__onsen.camera.fov=24` 拉長焦看小物）；不給視角時拍預設五張。改完畫面相關的東西一定要自己拍照檢查，白天與夜晚都看；終端若印出 `pageerror`／`console error` 代表程式壞了。原圖是 3200×1800，檢視前先用 `sips -Z 1300` 縮小。
 - 使用者也會用截圖回報畫面問題。
 - 設計參考圖在 `reference/`（onsen01–05）。
@@ -47,14 +48,18 @@
 
 - [x] 第一階段：配置與移動
 - [x] 第二階段：水、蒸氣、岩石與建築材質
-- [x] 第三階段：天空、日夜切換、星空與銀河；湯屋改建；基本燈光；材質改用實拍 PBR 貼圖（使用者於 2026-11-11 確認）。留給後面的事：北側山坡與近山只是混色斑塊；夜晚障子窗偏亮、木台地板偏黃、地面的苔略像草皮（使用者未要求改，第五階段打磨時再看）。
+- [x] 第三階段：天空、日夜切換、星空與銀河；湯屋改建；基本燈光；材質改用實拍 PBR 貼圖（使用者於 2026-11-11 確認）。留給後面的事：北側山坡與近山只是混色斑塊（5C）；障子窗、木台、苔已在 5B 處理。
 - [x] 第四階段（拆成三段；使用者於 2026-11-12 全部確認）
   - [x] 4A 植栽（使用者於 2026-11-12 確認）。`js/trees.js`：場內 7 棵楓樹（程序枝幹 + 約 3.4 萬張「楓枝」貼片）、`PROPS.mapleBranch` 的低垂枝（獨立的 mesh 與材質，`trees.low` 有 `pos`／`uShake`／`mesh` 留給 4C）、場外樹林 46 棵（杉與闊葉，大貼片包深色的芯）、落葉（地面、岩石、屋頂、水面，約 1 萬片；`trees.leafMap` 是單片楓葉貼圖，4C 飄落的葉子可用）。可調的地方：樹的主色 `TREE_HUE`、色階 `GRAD`、葉量（`createTrees` 裡的 `R.x * R.x * 400`）、落葉量（`fallenLeaves` 裡的 115 與 2600）。
   - [x] 4B 燈籠與小物（使用者於 2026-11-12 確認）。`js/props.js`：春日型石燈籠 5 座、行燈 4 盞、檜木桶＋小凳＋手巾、鹿威し、牛奶（小台上的木箱，三瓶）。`temp` 佔位群組已移除。每盞燈（含簷下吊燈籠、入口提燈）各有自己的和紙材質，把 `lights.lamps[i].on` 設成 false 就只熄那一盞（紙面與點光源一起，約 0.6 秒淡出；要立刻到位呼叫 `lights.snap()`）。留給 4C 的接口在 `createProps` 的回傳值（`window.__onsen.props`）：`lanterns[]`、`oke.group`／`oke.water`、`shishi.pivot`（竹筒轉軸，靜止角 `shishi.rest`）／`shishi.spout`（出水口，鹿威し群組的局部座標）、`milk.bottles[]`（各有 `group`／`liquid`／`glass`／`cap`）。`lights.lamps` 每筆有 `kind`（stone／andon／hanging／chochin／engawa）、`paper`（可當注視目標的 mesh）；`engawa` 兩盞是窗內透出的光，不是可熄的燈具。
   - [x] 4C 互動（使用者於 2026-11-12 實機確認）。`js/interact.js`：注視判定（視線旁 `r` 公尺內、距離 2.5 m 內，不做遮擋判斷）、被注視時微亮（燈是和紙自己變亮，其他物件疊一層加色的殼 `shell()`，楓枝用材質的 emissive）、首次提示（`#hint`）、H 說明（`#help`）。泡湯（水深 0.4 m 以上才能坐）、木桶舀水、點燈熄燈、坐下觀星、搖落紅葉、牛奶、鹿威し都已接上。可調的地方：星空變亮倍率（`update` 裡的 `1 + 1.1 * lights.dark`）、泡湯蒸氣倍率 1.7、落葉每次 26 片（`shake`）、鹿威し週期 `CYCLE`。尚未做：各互動的聲音（第五階段）。截圖測試可用 `--eval=__onsen.interact.trigger('oke')`（id：`oke`、`bench`、`leaf`、`milk0`–`2`、`lamp0`–、`soak`、`stand`）；`--eval` 會在擺好視角之前執行，要拍動畫中途就用 `setTimeout` 延後觸發。
 - [ ] 第五階段（拆成三段，使用者 2026-11-12 選定內容）
   - [ ] 5A 音效：**已實作並 commit（2026-11-12），待使用者實機試聽**。`js/audio.js`：環境聲（湯口流水有方位、白天鳥鳴、夜晚蟲鳴、風）與部分互動聲（倒水、涉水、木地板腳步、喝）用 CC0 實錄音檔，其餘短音（鹿威し敲石、開關燈、搖枝、瓶蓋、石板腳步）用 Web Audio 合成（使用者選「混合」）。靜音是 N 鍵＋右上角按鈕，預設有聲，會記在 localStorage。聲音在按「進入場景」時才啟動。可調的地方：各層音量 `MIX`；個別互動聲的 `gain` 在檔案後半的各方法裡。**Claude 聽不到聲音**，只能用頻譜圖與音量數字挑檔、驗證；音色好不好要靠使用者回報。自動檢查：`__onsen.audio.loaded`（已載入的檔）、`__onsen.audio.debug`（`ctx`／`master`，可接 AnalyserNode 量音量）。
-  - [ ] 5B 預編譯與色調小修：開始畫面預編譯 shader（日夜兩種狀態）；夜晚障子窗偏亮、木台地板偏黃、地面的苔像草皮。
+  - [ ] 5B 暖機與色調小修：**已實作並 commit（2026-11-13），待使用者實機確認**。
+    - 暖機（`js/main.js` 的 `warmUp()`）：開始畫面先等貼圖載完（`shaders.js` 的 `texturesReady()`）、`compileAsync`，再把平常隱藏的東西暫時全部打開、關掉視錐剔除，在夜晚與白天各實際畫一次後還原；完成前「進入場景」按鈕顯示「準備中…」不能按，主迴圈也在完成後才啟動（`__onsen.ready`）。用 `node tools/perf.js` 量：改之前進場後還會新編 2 個 shader、流星第一次出現時再 2 個；改之後 101 個全部在開始畫面編完，進場後剩一格約 50 ms（按下按鈕當下，推測是建立 AudioContext，未實測），切夜晚沒有長畫格。無頭 Chrome 原本就重現不出使用者說的「第一次切夜晚頓一下」，所以實機是否改善要靠使用者回報。
+    - 障子窗：夜裡過曝的主因是窗前那兩盞 `engawa` 點光源把白紙照亮，不是窗紙自己的發光。`world.js` 的 `SHOJI_NIGHT`（透光亮度 0.22）與 `SHOJI_ALBEDO`（夜裡反光比例 0.12）。
+    - 望景台地板與長椅：改用 `DECK_WOOD`（灰褐）並加重風化；簷廊地板仍是 `HINOKI`。
+    - 地面的苔：`shaders.js` GROUND 的 `mossMask`／`mossPad`，顏色壓深偏橄欖、改成一團團的苔墊、細顆粒變淡。
   - [ ] 5C 北側山坡與近山（目前只是混色斑塊，工程較大，獨立一段）。
 
 第四階段已定案（使用者 2026-11-12 選定）：

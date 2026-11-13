@@ -33,6 +33,9 @@ export function wood(color, grain = 0, plank = 0, weather = 0.45, plankY = false
   return woodCache.get(key);
 }
 const CEDAR = 0x7a5740, CEDAR_DARK = 0x5c4433, HINOKI = 0xb08a5c, BOARD = 0x8a6646;
+const DECK_WOOD = 0x8e7a66; // 望景台：日曬雨淋後褪成灰褐的木板
+const SHOJI_NIGHT = 0.22;    // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
+const SHOJI_ALBEDO = 0.12;   // 夜晚窗紙反光的比例（1 = 和白天一樣白）
 
 function mesh(g, geo, m, x, y, z, shadow = true) {
   const o = new THREE.Mesh(geo, m);
@@ -235,8 +238,16 @@ export function buildWorld(scene) {
   const SHOJI = new THREE.MeshStandardMaterial({ color: 0xf3e3c2, map: paperMap, emissive: 0xffc27a, emissiveMap: paperMap, emissiveIntensity: M.paper.emissiveIntensity, roughness: 1 });
   // 夜間發光強度由 daynight.js 驅動 M.paper；窗紙用 getter 直接跟著它（不必改 daynight.js）
   // G.house 降到 0（場內的燈全熄）時，窗內也只剩一點餘光
+  const SHOJI_COL = SHOJI.color.clone();
   Object.defineProperty(SHOJI, 'emissiveIntensity', {
-    get: () => { const e = M.paper.emissiveIntensity, h = G.house.value; return e * h + Math.min(e, 0.12) * (1 - 0.75 * G.night.value) * (1 - h); },
+    // 夜裡窗紙比燈籠暗（SHOJI_NIGHT）：整面窗都亮到泛白會搶過燈籠，也看不出和紙的濃淡。
+    // 窗前那兩盞代表「窗內透出的光」的點光源會把白紙照到過曝，所以夜裡也把紙的反光壓低（SHOJI_ALBEDO），
+    // 讓窗的亮度主要來自自己的透光。three 每畫一次都會讀這個值，順便在這裡更新顏色。
+    get: () => {
+      const p = M.paper.emissiveIntensity, n = G.night.value, h = G.house.value;
+      SHOJI.color.copy(SHOJI_COL).multiplyScalar(1 - (1 - SHOJI_ALBEDO) * n);
+      return p * (1 - (1 - SHOJI_NIGHT) * n) * h + Math.min(p, 0.12) * (1 - 0.75 * n) * (1 - h);
+    },
     set() {}, configurable: true,
   });
   const world = new THREE.Group();
@@ -532,7 +543,7 @@ export function buildWorld(scene) {
   // ---------- 望景木台 ----------
   {
     const D = L.DECK, w = D.x1 - D.x0, cx = (D.x0 + D.x1) / 2, d = D.z1 - D.z0 + 0.6, cz = (D.z0 + D.z1) / 2 - 0.3;
-    wbox(world, w, 0.05, d, cx, D.y - 0.025, cz, HINOKI, { grain: 0, plank: 0.13, weather: 0.5 });
+    wbox(world, w, 0.05, d, cx, D.y - 0.025, cz, DECK_WOOD, { grain: 0, plank: 0.13, weather: 0.7 });
     wbox(world, w, D.y - 0.05, 0.06, cx, (D.y - 0.05) / 2, D.z1 - 0.03, CEDAR);
     for (const x of [D.x0 + 0.03, D.x1 - 0.03]) wbox(world, 0.06, D.y - 0.05, d, x, (D.y - 0.05) / 2, cz, CEDAR);
     for (let x = D.x0 + 0.2; x <= D.x1; x += 1.4) for (const z of [D.z0 - 0.4, D.z0 + 1.6]) wbox(world, 0.14, 4, 0.14, x, D.y - 2.05, z, CEDAR_DARK);
@@ -549,7 +560,7 @@ export function buildWorld(scene) {
     }
     // 長椅
     const B = L.BENCH;
-    wbox(world, B.w, 0.055, B.d, B.x, D.y + B.h, B.z, HINOKI, { grain: 0, plank: 0.165, weather: 0.35 });
+    wbox(world, B.w, 0.055, B.d, B.x, D.y + B.h, B.z, DECK_WOOD, { grain: 0, plank: 0.165, weather: 0.5 });
     for (const sx of [-1, 1]) {
       wbox(world, 0.07, B.h - 0.03, B.d * 0.85, B.x + sx * (B.w / 2 - 0.22), D.y + (B.h - 0.03) / 2, B.z, CEDAR_DARK, { grain: 1 });
     }

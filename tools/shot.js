@@ -68,6 +68,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     // 截圖時不要鎖定滑鼠：無頭 Chrome 的滑鼠鎖定會把使用者真正的游標拉來拉去
     await page.evaluateOnNewDocument(() => { Element.prototype.requestPointerLock = () => {}; });
     await page.goto(url, { waitUntil: 'networkidle0', timeout: 60000 });
+    await page.waitForFunction(() => window.__onsen && window.__onsen.ready, { timeout: 60000 });
     await page.click('#start');
     await wait(1500);
     if (night) { await page.evaluate(() => window.__onsen.dayNight.toggle()); await wait(7500); }

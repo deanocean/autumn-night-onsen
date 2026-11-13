@@ -12,6 +12,7 @@ import { Player } from './player.js';
 import { createInteract } from './interact.js';
 import { createAudio } from './audio.js';
 import { G } from './env.js';
+import { texturesReady } from './shaders.js';
 
 const canvas = document.getElementById('scene');
 const intro = document.getElementById('intro');
@@ -20,6 +21,7 @@ const errBox = document.getElementById('err');
 const timeBtn = document.getElementById('time');
 const helpBtn = document.getElementById('helpbtn');
 const soundBtn = document.getElementById('sound');
+const startBtn = document.getElementById('start');
 
 function fail(msg) {
   errBox.textContent = msg;
@@ -83,7 +85,7 @@ function toggleTime() {
   timeBtn.setAttribute('aria-pressed', night ? 'true' : 'false');
 }
 
-document.getElementById('start').addEventListener('click', () => {
+startBtn.addEventListener('click', () => {
   intro.classList.add('hide');
   player.enabled = true;
   timeBtn.hidden = false;
@@ -123,6 +125,28 @@ addEventListener('keydown', (e) => {
 
 const clock = new THREE.Clock();
 
+// 暖機：在開始畫面就把所有 shader 編好、貼圖送進顯示卡，進場與第一次切到夜晚時才不會頓。
+// 做法是把平常隱藏的東西（發亮的殼、水珠、流星、標籤……）暫時全部打開、關掉視錐剔除，
+// 在白天與夜晚各實際畫一次（含陰影與水面倒影），再還原。整段在同一個工作裡完成，
+// 瀏覽器只會顯示最後那張正常的畫面。
+async function warmUp() {
+  await Promise.race([texturesReady(), new Promise((r) => setTimeout(r, 20000))]);
+  try { await renderer.compileAsync(scene, camera); } catch (e) { console.warn(e); }
+  const hidden = [], culled = [];
+  scene.traverse((o) => {
+    if (!o.visible) { hidden.push(o); o.visible = true; }
+    if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; }
+  });
+  for (const night of [true, false]) {
+    dayNight.set(night, true);
+    sky.update(0, camera);
+    renderer.render(scene, camera);
+  }
+  hidden.forEach((o) => { o.visible = false; });
+  culled.forEach((o) => { o.frustumCulled = true; });
+  renderer.render(scene, camera);
+}
+
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   G.uTime.value += dt;
@@ -137,7 +161,17 @@ function frame() {
   renderer.render(scene, guides.top ? guides.topCam : camera);
   requestAnimationFrame(frame);
 }
-frame();
 
 // 供自動檢查使用
-window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props, water, interact, audio };
+window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props, water, interact, audio, ready: false };
+
+startBtn.disabled = true;
+startBtn.textContent = '準備中…';
+warmUp().catch((e) => console.error(e)).then(() => {
+  clock.getDelta();
+  frame();
+  canvas.classList.add('ready');
+  startBtn.disabled = false;
+  startBtn.textContent = '進入場景';
+  window.__onsen.ready = true;
+});

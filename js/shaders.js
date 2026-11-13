@@ -69,18 +69,28 @@ const MODES = {
       r = mix(r, 1.0, moss);
     }`,
   GROUND: /* glsl */ `
-    float surfH(vec3 wp, vec3 op){ return fbm2(wp * 6.0) * 0.008; }
+    // 苔的分布（0–1）與一團團隆起的苔墊（杉苔、砂苔那種矮而密的墊狀，不是一根根的草）
+    float mossMask(vec3 wp, float lum){ return rs(0.57, 0.66, fbm(wp * 0.55 + 3.0) + (1.0 - lum) * 0.10); }
+    float mossPad(vec3 wp){
+      vec2 q = wp.xz * 9.0 + (vec2(vnoise(wp * 3.0), vnoise(wp * 3.0 + 7.0)) - 0.5) * 1.2;
+      return 1.0 - rs(0.0, 0.75, voro(q).x);
+    }
+    float surfH(vec3 wp, vec3 op){
+      return fbm2(wp * 6.0) * 0.008 + mossMask(wp, 1.0) * (0.004 + mossPad(wp) * 0.014);
+    }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
       float a = fbm(wp * 2.2);
       float lum = dot(gA, vec3(0.333)) / dot(uMean, vec3(0.333));
       c = gA * gMacro * GROUND_TINT;
       c *= mix(0.8, 1.1, fbm2(wp * 0.6 + 4.0));
-      // 苔：成片分布，邊緣沿著砂礫的縫隙滲開，表面有絨毛般的細點
-      float mm = fbm(wp * 0.55 + 3.0) + (1.0 - lum) * 0.10;
-      float moss = rs(0.56, 0.66, mm);
-      vec3 mc = mix(vec3(0.050, 0.075, 0.022), vec3(0.115, 0.140, 0.042), vnoise(wp * 5.0 + 2.0));
-      mc *= 0.5 + 1.0 * vnoise(wp * 130.0) * (0.6 + 0.4 * lum);
-      c = mix(c, mc, moss * 0.88);
+      // 苔：成片分布，邊緣沿著砂礫的縫隙滲開；顏色壓深、偏橄欖，墊與墊之間的縫較暗，
+      // 表面只留很淡的絨毛顆粒（顆粒太亮太碎會像草皮）
+      float moss = mossMask(wp, lum);
+      float pad = mossPad(wp);
+      vec3 mc = mix(vec3(0.030, 0.046, 0.016), vec3(0.070, 0.086, 0.028), vnoise(wp * 2.4 + 2.0));
+      mc = mix(mc, vec3(0.085, 0.080, 0.030), rs(0.55, 0.8, vnoise(wp * 1.1 + 31.0)) * 0.6); // 局部偏黃褐
+      mc *= mix(0.55, 1.15, pad) * (0.85 + 0.3 * vnoise(wp * 140.0));
+      c = mix(c, mc, moss * 0.92);
       // 池邊被湯水打濕
       float t = poolT(wp.xz);
       float wet = rs(1.22, 1.02, t + (a - 0.5) * 0.1);
@@ -252,12 +262,17 @@ const TEX_USE = {
 const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25' };
 
 const loader = new THREE.TextureLoader();
+// 每張貼圖一個 Promise（載入失敗也算結束）；main.js 的暖機會等它們全部到齊
+const pendingTextures = [];
+export const texturesReady = () => Promise.all(pendingTextures);
 const texCache = new Map();
 function texSet(slot) {
   if (texCache.has(slot)) return texCache.get(slot);
   const mean = { value: new THREE.Vector3(0.5, 0.5, 0.5) };
   const load = (kind, srgb, onLoad) => {
-    const t = loader.load(`textures/${slot}_${kind}.jpg`, onLoad);
+    let done;
+    pendingTextures.push(new Promise((r) => { done = r; }));
+    const t = loader.load(`textures/${slot}_${kind}.jpg`, (tex) => { onLoad?.(tex); done(); }, undefined, () => done());
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = 8;
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;

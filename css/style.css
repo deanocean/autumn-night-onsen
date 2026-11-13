@@ -23,7 +23,10 @@ html, body {
   height: 100%;
   display: block;
   outline: none;
+  opacity: 0;
+  transition: opacity 0.8s ease;
 }
+#scene.ready { opacity: 1; }
 
 .panel {
   position: fixed;
@@ -96,7 +99,8 @@ h1 {
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease;
 }
-#start:hover { background: #f2b673; transform: translateY(-1px); }
+#start:disabled { opacity: 0.55; cursor: default; }
+#start:hover:not(:disabled) { background: #f2b673; transform: translateY(-1px); }
 #start:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
 #topright {
