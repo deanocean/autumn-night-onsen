@@ -33,9 +33,9 @@ export function wood(color, grain = 0, plank = 0, weather = 0.45, plankY = false
   return woodCache.get(key);
 }
 const CEDAR = 0x7a5740, CEDAR_DARK = 0x5c4433, HINOKI = 0xb08a5c, BOARD = 0x8a6646;
-const DECK_WOOD = 0x8e7a66; // 望景台：日曬雨淋後褪成灰褐的木板
-const SHOJI_NIGHT = 0.22;    // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
-const SHOJI_ALBEDO = 0.12;   // 夜晚窗紙反光的比例（1 = 和白天一樣白）
+const DECK_WOOD = 0x6f5d4c; // 望景台：日曬雨淋後褪成灰褐的木板
+const SHOJI_NIGHT = 0.45;    // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
+const SHOJI_ALBEDO = 0.24;   // 夜晚窗紙反光的比例（1 = 和白天一樣白）
 
 function mesh(g, geo, m, x, y, z, shadow = true) {
   const o = new THREE.Mesh(geo, m);
