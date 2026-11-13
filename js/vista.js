@@ -43,19 +43,18 @@ const float SEA = ${SEA.toFixed(1)};
 const float PI = 3.14159265;
 
 // 樹冠的顏色：闊葉（紅、橙、黃、褐、殘綠）與杉、檜（深綠）
-vec3 broadCol(float h, float zone){
-  // zone 讓某些坡面偏紅、某些偏黃，不是均勻的胡椒鹽；遠看秋天的山仍以褐綠為底，紅黃是點綴
-  h = fract(h + zone * 0.6);
-  if (h < 0.12) return vec3(0.40, 0.11, 0.06);
-  if (h < 0.24) return vec3(0.48, 0.21, 0.08);
-  if (h < 0.36) return vec3(0.52, 0.34, 0.10);
-  if (h < 0.48) return vec3(0.44, 0.38, 0.14);
-  if (h < 0.68) return vec3(0.27, 0.21, 0.11);
-  return vec3(0.20, 0.25, 0.11);
+vec3 broadCol(float h){
+  h = fract(h);
+  if (h < 0.10) return vec3(0.40, 0.07, 0.04);
+  if (h < 0.22) return vec3(0.52, 0.17, 0.05);
+  if (h < 0.34) return vec3(0.56, 0.30, 0.07);
+  if (h < 0.44) return vec3(0.52, 0.40, 0.10);
+  if (h < 0.62) return vec3(0.24, 0.17, 0.08);
+  if (h < 0.80) return vec3(0.22, 0.23, 0.08);
+  return vec3(0.13, 0.19, 0.07);
 }
-const vec3 BROAD_AVG = vec3(0.32, 0.24, 0.11);
-vec3 conCol(float h){ return mix(vec3(0.06, 0.12, 0.07), vec3(0.12, 0.18, 0.10), h); }
-const vec3 CON_AVG = vec3(0.09, 0.15, 0.085);
+vec3 conCol(float h){ return mix(vec3(0.035, 0.085, 0.045), vec3(0.08, 0.14, 0.07), h); }
+const vec3 CON_AVG = vec3(0.055, 0.11, 0.058);
 
 float townMask(vec2 p){
   float m = 0.0;
@@ -82,12 +81,21 @@ void main(){
 
   // ---------- 陸地 ----------
   float zone = fbm(vec3(P.xz / 480.0, 3.0));
-  float conifer = clamp(rs(0.3, 0.6, zone) * 0.6 + 0.3, 0.0, 1.0);
+  // 杉、檜的人工林成片出現，背陽的北坡多一些
+  float conifer = clamp(rs(0.36, 0.56, zone) * 0.75 + 0.12 - N.z * 0.25, 0.04, 0.96);
   float hueZone = fbm2(vec3(P.xz / 160.0, 8.0));
 
-  // 樹冠：Voronoi 格子，每格一棵樹，以到中心的向量做出圓頂的法線
+  // 遠看的起伏：網格的頂點間隔在遠處有幾十公尺，小谷小脊靠法線的擾動補上
+  float be = max(px * 1.5, 10.0);
+  vec3 bp = vec3(P.xz / 130.0, 6.0);
+  float b0 = fbm(bp);
+  vec2 bg = vec2(fbm(bp + vec3(be / 130.0, 0.0, 0.0)) - b0, fbm(bp + vec3(0.0, be / 130.0, 0.0)) - b0) / be;
+  vec3 Nb = normalize(N - vec3(bg.x, 0.0, bg.y) * 38.0 * rs(140.0, 30.0, px) * rs(-2.0, 12.0, h));
+
+  // 樹冠：Voronoi 格子，每格一棵樹，以到中心的向量做出圓頂的法線。座標先扭一扭，樹才有大有小、不排成格子
   const float CS = 6.5;
-  vec2 q = P.xz / CS, n = floor(q), f = fract(q);
+  vec2 qw = P.xz + (vec2(vnoise(vec3(P.xz / 21.0, 1.0)), vnoise(vec3(P.xz / 21.0, 7.0))) - 0.5) * 9.0;
+  vec2 q = qw / CS, n = floor(q), f = fract(q);
   float md = 8.0, md2 = 8.0; vec2 mr = vec2(0.0), mc = vec2(0.0);
   for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
     vec2 g = vec2(float(i), float(j));
@@ -95,31 +103,60 @@ void main(){
     float d = dot(r, r);
     if (d < md) { md2 = md; md = d; mr = r; mc = g; } else if (d < md2) md2 = d;
   }
-  float id = hash21(n + mc), id2 = fract(id * 37.13), id3 = fract(id * 91.7);
+  vec2 cell = n + mc;
+  float id = hash21(cell), id2 = fract(id * 37.13), id3 = fract(id * 91.7);
   float isCon = step(id2, conifer);
-  float rad = 0.58 + 0.2 * id3;
-  float t = clamp(sqrt(md) / rad, 0.0, 1.0);
-  float gap = rs(0.7, 1.0, sqrt(md) / rad) * 0.7 + rs(0.12, 0.0, sqrt(md2) - sqrt(md)) * 0.3;
-  vec3 cn = normalize(vec3(-mr.x, sqrt(1.0 - t * t) * mix(0.9, 0.5, isCon) + 0.08, -mr.y));
+  // 樹冠的輪廓與表面：一叢叢葉子的凹凸（近看才有）
+  float lump = fbm2(vec3(P.xz / 1.1, P.y / 1.1)), fine = vnoise(vec3(P.xz / 0.28, P.y / 0.28));
+  float nearK = rs(0.35, 0.06, px);
+  float rad = 0.62 + 0.22 * id3;
+  float dd = sqrt(md) / rad + (lump - 0.4) * 0.5 * nearK;
+  float t = clamp(dd, 0.0, 1.0);
+  float edge = sqrt(md2) - sqrt(md);
+  float gap = clamp(rs(0.72, 1.05, dd) * 0.8 + rs(0.16, 0.0, edge) * 0.5, 0.0, 1.0);
+  vec3 cn = normalize(vec3(-mr.x, sqrt(1.0 - t * t) * mix(0.9, 0.5, isCon) + 0.08, -mr.y)
+    + vec3(lump - 0.4, 0.0, fine - 0.5) * 0.9 * nearK);
   vec3 nC = normalize(cn + (N - vec3(0.0, 1.0, 0.0)) * 1.2);
-  vec3 crown = mix(broadCol(id, hueZone), conCol(id3), isCon) * (0.75 + 0.5 * fract(id * 5.3));
-  vec3 broadAvg = mix(vec3(0.36, 0.20, 0.09), vec3(0.30, 0.28, 0.12), hueZone);
-  vec3 avg = mix(broadAvg, CON_AVG, conifer) * 0.82;
-  // 近看：樹冠裡的葉叢顆粒
-  crown *= mix(0.7 + 0.6 * fbm2(vec3(P.xz / 0.7, P.y / 0.7)), 1.0, rs(0.05, 0.3, px));
+  // 同一種樹成群：色相跟著幾十公尺大的區塊走，每棵只偏一點
+  float grove = fbm2(vec3(cell * CS / 55.0, 2.0));
+  vec3 crown = mix(broadCol(grove * 1.9 + hueZone * 0.7 + id * 0.22), conCol(id3), isCon) * (0.8 + 0.4 * fract(id * 5.3));
+  crown *= mix(1.0, (0.55 + 0.75 * lump) * (0.8 + 0.4 * fine), nearK);
+  // 樹冠靠外圈與樹之間的縫隙是暗的（看進林子裡面）
+  crown *= (1.0 - gap * 0.8) * mix(1.0, 0.72 + 0.28 * (1.0 - t * t), 0.7);
+  vec3 broadAvg = mix(vec3(0.33, 0.16, 0.06), vec3(0.27, 0.23, 0.08), hueZone);
+  vec3 avg = mix(broadAvg, CON_AVG, conifer) * 0.66;
   float lod = rs(0.07, 0.3, px / CS);
-  vec3 alb = mix(crown * (1.0 - gap * 0.75), avg * 0.85, lod);
-  vec3 nL = normalize(mix(nC, N, lod));
-  // 一群群樹的明暗（約 40 公尺），再遠就淡掉
-  alb *= mix(0.78 + 0.44 * fbm2(vec3(P.xz / 38.0, 5.0)), 1.0, rs(6.0, 25.0, px));
+  vec3 alb = mix(crown, avg, lod);
+  vec3 nL = normalize(mix(nC, Nb, lod));
+  // 一群群樹的明暗與色差（約 40 公尺與 150 公尺），再遠就淡掉
+  float clump = fbm2(vec3(P.xz / 38.0, 5.0));
+  alb *= mix(0.62 + 0.76 * clump, 1.0, rs(6.0, 30.0, px));
+  alb = mix(alb, alb * vec3(1.25, 0.82, 0.6), rs(0.52, 0.75, fbm2(vec3(P.xz / 95.0, 11.0))) * (1.0 - conifer) * 0.7);
+  alb *= 0.8 + 0.4 * b0;
+  // 林冠的顆粒：不管多遠，都有大約幾個像素大的明暗（樹與樹影），山才不會是一片平塗
+  float lg = log2(max(px, 0.4) * 2.5), l0 = floor(lg), s0 = exp2(l0);
+  float grain = mix(vnoise(vec3(P.xz / s0, 1.3)), vnoise(vec3(P.xz / (s0 * 2.0), 1.3)), lg - l0);
+  alb *= mix(1.0, 0.62 + 0.76 * grain, lod * rs(90.0, 20.0, px));
+
+  // 崖下近處的山坡：實際的樹（trees.js）腳下是林床，矮竹與灌木、落葉
+  float dP = length(max(abs(P.xz - vec2(0.0, 13.5)) - vec2(34.0, 26.5), 0.0));
+  float under = rs(120.0, 35.0, dP);
+  if (under > 0.0) {
+    float u1 = fbm(vec3(P.xz / 2.6, 3.0)), u2 = fbm2(vec3(P.xz / 0.45, P.y / 0.45));
+    vec3 uc = mix(vec3(0.060, 0.085, 0.035), vec3(0.15, 0.17, 0.06), rs(0.3, 0.7, u1));
+    uc = mix(uc, vec3(0.20, 0.10, 0.045), rs(0.55, 0.8, fbm2(vec3(P.xz / 6.0, 9.0))) * 0.7);
+    uc *= 0.55 + 0.9 * u2;
+    alb = mix(alb, uc * 0.8, under);
+    nL = normalize(mix(nL, normalize(N + vec3(u2 - 0.4, 0.0, u1 - 0.5) * 0.7), under));
+  }
 
   // 陡坡露出岩壁
-  float rock = rs(0.62, 0.45, N.y) * rs(0.35, 0.6, fbm2(vec3(P.xz / 25.0, P.y / 25.0)));
-  alb = mix(alb, vec3(0.30, 0.28, 0.25) * (0.8 + 0.4 * fbm2(vec3(P.xz / 6.0, 2.0))), rock);
+  float rock = rs(0.58, 0.42, N.y) * rs(0.4, 0.62, fbm2(vec3(P.xz / 25.0, P.y / 25.0)));
+  alb = mix(alb, vec3(0.19, 0.17, 0.15) * (0.8 + 0.4 * fbm2(vec3(P.xz / 6.0, 2.0))), rock);
 
   // 溫泉所在的平台：林床（落葉與土），不畫樹冠（實際的樹在 trees.js）
   float floorM = rs(-3.0, -0.6, vH) * rs(260.0, 120.0, length(P.xz));
-  vec3 floorC = mix(vec3(0.16, 0.10, 0.06), vec3(0.30, 0.15, 0.07), fbm2(vec3(P.xz / 1.7, 4.0)));
+  vec3 floorC = mix(vec3(0.09, 0.065, 0.04), vec3(0.17, 0.10, 0.05), fbm2(vec3(P.xz / 1.7, 4.0)));
   alb = mix(alb, floorC, floorM);
   nL = normalize(mix(nL, N, floorM));
 
@@ -132,8 +169,8 @@ void main(){
     float bld = step(bh, dens) * rs(0.48, 0.38, max(abs(bf.x - 0.5), abs(bf.y - 0.5)));
     float k = fract(bh * 53.1);
     vec3 roof = k < 0.35 ? vec3(0.55, 0.56, 0.56) : k < 0.55 ? vec3(0.27, 0.31, 0.36) : k < 0.8 ? vec3(0.78, 0.77, 0.73) : vec3(0.42, 0.26, 0.19);
-    vec3 ground = mix(vec3(0.20, 0.24, 0.14), vec3(0.42, 0.41, 0.38), 0.4);
-    vec3 tc = mix(mix(ground, roof, bld), mix(ground, vec3(0.55, 0.54, 0.52), dens * 0.6), rs(0.3, 1.2, px / 9.0));
+    vec3 ground = mix(vec3(0.13, 0.17, 0.09), vec3(0.34, 0.33, 0.31), 0.4);
+    vec3 tc = mix(mix(ground, roof, bld), mix(ground, vec3(0.50, 0.49, 0.47), dens * 0.6) * (0.6 + 0.8 * vnoise(vec3(P.xz / max(px * 2.5, 9.0), 4.4))), rs(0.3, 1.2, px / 9.0));
     alb = mix(alb, tc, town);
     nL = normalize(mix(nL, N, town));
     townLit = town * dens;
@@ -149,7 +186,7 @@ void main(){
   float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 6.0) * rs(0.85, 0.5, N.y);
   land += uNight * (vec3(0.0035, 0.005, 0.009) * (0.4 + 0.6 * N.y) + vec3(0.006, 0.009, 0.016) * rim);
   // 夜晚聚落地面被燈照亮的暖色
-  land += uLit * townLit * vec3(1.0, 0.62, 0.3) * 0.035;
+  land += uLit * townLit * vec3(1.0, 0.62, 0.3) * 0.02;
 
   // ---------- 海面 ----------
   // 波紋：遠處的格子比像素還小就淡掉，免得閃爍
@@ -164,18 +201,22 @@ void main(){
   fres *= 0.8 + 0.35 * streak;
   vec3 body = uHemiSky * uHemiI * vec3(0.03, 0.09, 0.14);
   // 對岸的山的倒影：暗、帶一點林色
-  vec3 hillRefl = (avg * 0.6) * (uHemiSky * uHemiI * 0.35 + uSunCol * uSunI * 0.12) / PI;
+  vec3 hillRefl = (avg * 0.75) * (uHemiSky * uHemiI * 0.35 + uSunCol * uSunI * 0.12) / PI;
   vec3 refl = mix(sky, hillRefl, clamp(vRefl, 0.0, 1.0) * 0.9);
   vec3 sea = mix(body, refl, clamp(fres, 0.0, 1.0));
   // 夜晚的海映著星空，比陸地亮一點
-  sea += uNight * vec3(0.006, 0.011, 0.022) * (0.5 + fres) * (1.0 - vRefl * 0.8);
+  sea += uNight * vec3(0.008, 0.015, 0.03) * (0.5 + fres) * (1.0 - vRefl * 0.8);
+  // 聚落的燈火映在附近海面上的一片暖色
+  float glow = 0.0;
+  for (int i = 0; i < ${TOWNS.length}; i++) { vec4 tw = uTowns[i]; vec2 dq = (P.xz - tw.xy) / (tw.z * 1.7); glow += tw.w * exp(-dot(dq, dq)); }
+  sea += uLit * glow * vec3(1.0, 0.6, 0.3) * 0.012 * (0.4 + fres);
   float sg = pow(max(dot(R, L), 0.0), 300.0) * uSunI * (1.0 - uNight);
   sea += uSunCol * sg * 2.0;
 
   vec3 col = mix(land, sea, water);
 
   // ---------- 空氣遠近：越遠越淡、越藍；低處（海面附近）的靄比較濃 ----------
-  float dens = (1.0 / 11000.0) * (1.0 + 1.0 * exp(-max(P.y - SEA, 0.0) / 80.0));
+  float dens = (1.0 / 23000.0) * (1.0 + 0.8 * exp(-max(P.y - SEA, 0.0) / 80.0));
   float hz = 1.0 - exp(-dist * dens);
   hz = max(hz, rs(8500.0, 11800.0, dist));
   vec3 hcol = mix(mix(uHaze, uSkyTop, 0.32 * (1.0 - uNight)), uSkyHorizon, rs(3000.0, 10000.0, dist));
@@ -212,20 +253,22 @@ export function slopeTreeSpots() {
 
 
 // ---------- 夜景燈火 ----------
+// aFx：亮度、相位、是否在海面拉出倒影、種類（0 常亮、1 航空障礙燈慢閃、2 燈塔的閃光）
 const lightVert = /* glsl */ `
-attribute vec3 aCol; attribute vec3 aFx; // aFx：亮度、相位、是否在海面拉出倒影
+attribute vec3 aCol; attribute vec4 aFx;
 uniform float uLit, uPx, uTime;
 varying vec3 vC; varying float vA;
 void main(){
   vec4 mv = viewMatrix * vec4(position, 1.0);
   float d = -mv.z;
-  // 遠處的燈因空氣擾動微微閃爍；紅色航空障礙燈慢慢明滅
-  float tw = 0.82 + 0.18 * sin(uTime * (1.5 + aFx.y * 5.0) + aFx.y * 40.0);
-  if (aCol.g < 0.2) tw = 0.15 + 0.85 * step(0.5, fract(uTime * 0.5 + aFx.y));
+  // 遠處的燈因空氣擾動微微閃爍
+  float tw = 0.8 + 0.2 * sin(uTime * (1.5 + aFx.y * 5.0) + aFx.y * 40.0);
+  if (aFx.w > 1.5) tw = 0.12 + 2.2 * pow(max(sin(uTime * 0.9 + aFx.y * 6.283), 0.0), 24.0);
+  else if (aFx.w > 0.5) tw = 0.15 + 0.85 * smoothstep(0.35, 0.5, abs(fract(uTime * 0.45 + aFx.y) - 0.5) * 2.0);
   vA = aFx.x * uLit * tw * exp(-d / 9000.0);
   vC = aCol;
   gl_Position = projectionMatrix * mv;
-  gl_PointSize = uPx * (2.2 + 3.4 * aFx.x) * clamp(1800.0 / d, 0.7, 1.8);
+  gl_PointSize = uPx * (2.0 + 3.2 * aFx.x) * clamp(1500.0 / d, 0.62, 2.0);
 }`;
 const lightFrag = /* glsl */ `
 varying vec3 vC; varying float vA;
@@ -233,14 +276,14 @@ void main(){
   vec2 p = gl_PointCoord * 2.0 - 1.0;
   float r = dot(p, p);
   if (r > 1.0) discard;
-  float a = (exp(-r * 9.0) + exp(-r * 2.5) * 0.18) * vA;
+  float a = (exp(-r * 9.0) + exp(-r * 2.5) * 0.16) * vA;
   gl_FragColor = vec4(vC * a * 2.2, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
 // 海面上的倒影：燈對海面的鏡像點，沿視線落在海面上的位置，拉成一條上下抖動的光條
 const streakVert = /* glsl */ `
-attribute vec3 aCol; attribute vec3 aFx;
+attribute vec3 aCol; attribute vec4 aFx;
 uniform float uLit, uPx, uTime;
 varying vec3 vC; varying float vA; varying float vSize; varying float vPh;
 void main(){
@@ -248,13 +291,17 @@ void main(){
   vec3 c = cameraPosition;
   float t = (c.y - ${SEA.toFixed(1)}) / max(c.y - m.y, 0.01);
   vec3 w = c + (m - c) * t;
-  w.y = ${(SEA + 0.4).toFixed(1)};
+  w.y = ${SEA.toFixed(1)};
   vec4 mv = viewMatrix * vec4(w, 1.0);
   float d = -mv.z;
-  vA = aFx.z * aFx.x * uLit * exp(-d / 8000.0);
+  float tw = aFx.w > 1.5 ? 0.12 + 2.2 * pow(max(sin(uTime * 0.9 + aFx.y * 6.283), 0.0), 24.0) : 1.0;
+  vA = aFx.z * aFx.x * uLit * tw * exp(-d / 8000.0);
   vC = aCol; vPh = aFx.y;
   gl_Position = projectionMatrix * mv;
-  vSize = uPx * (12.0 + 30.0 * aFx.x) * clamp(1500.0 / d, 0.45, 1.4);
+  // 深度往前挪 4%：幾公里外的深度精度只有十公尺上下，貼著海面的點會被海面自己吃掉
+  vec4 nearer = projectionMatrix * vec4(mv.xyz * 0.96, 1.0);
+  gl_Position.z = nearer.z / nearer.w * gl_Position.w;
+  vSize = uPx * (11.0 + 22.0 * aFx.x) * clamp(1500.0 / d, 0.5, 1.6);
   gl_PointSize = aFx.z > 0.5 ? vSize : 0.0;
 }`;
 const streakFrag = /* glsl */ `
@@ -262,13 +309,13 @@ uniform float uTime, uPx;
 varying vec3 vC; varying float vA; varying float vSize; varying float vPh;
 void main(){
   vec2 uv = gl_PointCoord;
-  float gx = (uv.x - 0.5) * vSize / (1.1 * uPx);
+  float gx = (uv.x - 0.5) * vSize / (1.25 * uPx);
   float line = exp(-gx * gx);
-  float y = uv.y - 0.38; // 光條大多落在燈的下方（靠近觀看者那側）
-  float prof = exp(-y * y / (y < 0.0 ? 0.012 : 0.07));
-  float dash = 0.45 + 0.55 * sin(uv.y * vSize * 0.55 / uPx + uTime * 2.2 + vPh * 30.0);
-  float a = line * prof * max(dash, 0.0) * vA;
-  gl_FragColor = vec4(vC * a * 1.6, 1.0);
+  float y = uv.y - 0.3; // 光條大多落在燈的下方（靠近觀看者那側）
+  float prof = exp(-y * y / (y < 0.0 ? 0.008 : 0.09));
+  float dash = 0.5 + 0.5 * sin(uv.y * vSize * 0.5 / uPx + uTime * 2.2 + vPh * 30.0);
+  float a = line * prof * dash * vA;
+  gl_FragColor = vec4(vC * a * 1.15, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -278,54 +325,127 @@ const LCOL = {
 };
 function pickCol(r) { return r < 0.45 ? LCOL.warm : r < 0.72 ? LCOL.sodium : r < 0.9 ? LCOL.white : LCOL.cool; }
 
+// 燈火不是一片均勻的亮點，而是有結構的：
+// 聚落裡一條條沿等高線的街（幾盞燈排成一小串）、從聚落沿海岸與往山上延伸的道路（等距的路燈）、
+// 海岸邊零星的小聚落、灣裡的船與外海的漁火、岬角的燈塔、山頂的航空障礙燈。
 function buildLights(radii, H, W, cos, sin, rand) {
   const pos = [], col = [], fx = [];
-  const add = (x, y, z, c, i, refl) => { pos.push(x, y, z); col.push(...c); fx.push(i, rand(), refl ? 1 : 0); };
-  const slopeAt = (x, z, h) => Math.hypot(heightAt(x + 5, z) - h, heightAt(x, z + 5) - h) / 5;
-  const townNear = (x, z) => { let m = 0; for (const [tx, tz, tr, td] of TOWNS) m = Math.max(m, td * Math.max(0, 1 - Math.hypot(x - tx, z - tz) / (tr * 1.9))); return m; };
+  const add = (x, y, z, c, i, refl, kind = 0) => { pos.push(x, y, z); col.push(...c); fx.push(i, rand(), refl ? 1 : 0, kind); };
+  // 陸上的一盞燈；燈前（朝觀看者那側）不遠就是海的，才在海面拉出倒影
+  const land = (x, z, c, i, lift = 5) => {
+    const h = heightAt(x, z);
+    if (h < SEA + 1.2) return false;
+    const r = Math.hypot(x, z) || 1;
+    const refl = h < SEA + 22 && (heightAt(x - (x / r) * 45, z - (z / r) * 45) < SEA || heightAt(x - (x / r) * 110, z - (z / r) * 110) < SEA);
+    add(x, h + lift + rand() * 3, z, c, i, refl);
+    return true;
+  };
+  const dim = () => 0.13 + 0.5 * rand() ** 3; // 多數的燈很暗，少數較亮
+  // 沿等高線的方向（坡太平就隨便）
+  const contour = (x, z) => {
+    const h = heightAt(x, z), gx = heightAt(x + 8, z) - h, gz = heightAt(x, z + 8) - h;
+    return Math.hypot(gx, gz) < 0.25 ? rand() * Math.PI : Math.atan2(gx, -gz);
+  };
+  // 道路：每一步在幾個方向裡挑最接近目標高度的，沿途等距立路燈。target(s) 是走了 s 公尺時想待的離海高度
+  const road = (x, z, dir, len, target, c, spacing, bright) => {
+    const STEP = 14;
+    let since = spacing * rand();
+    for (let s = 0; s < len; s += STEP) {
+      let best = null, bc = 1e9;
+      for (const da of [-0.55, -0.28, 0, 0.28, 0.55]) {
+        const a = dir + da, nx = x + Math.cos(a) * STEP, nz = z + Math.sin(a) * STEP, nh = heightAt(nx, nz) - SEA;
+        if (nh < 1.5) continue;
+        const cost = Math.abs(nh - target(s)) + Math.abs(da) * 5;
+        if (cost < bc) { bc = cost; best = [nx, nz, a]; }
+      }
+      if (!best) return;
+      [x, z, dir] = best;
+      since += STEP;
+      if (since >= spacing) { since = 0; land(x, z, c, bright * (0.8 + 0.4 * rand()), 7); }
+    }
+  };
+  // 一小串街燈與人家
+  const street = (x, z, n, sp) => {
+    const dir = contour(x, z), base = pickCol(rand());
+    for (let m = 0; m < n; m++) {
+      const u = (m - (n - 1) / 2) * sp;
+      const big = rand() < 0.04; // 偶爾有較亮的（大樓、加油站、港口照明）
+      land(x + Math.cos(dir) * u + (rand() - 0.5) * 8, z + Math.sin(dir) * u + (rand() - 0.5) * 8,
+        big ? LCOL.white : rand() < 0.6 ? base : pickCol(rand()), big ? 0.8 + rand() * 0.4 : dim());
+    }
+  };
 
-  // 1) 聚落：半徑內隨機撒點，只留在海岸附近、離海面不高的緩坡
+  // 1) 聚落：中心密、往外與往山上漸疏
   for (const [tx, tz, tr, td] of TOWNS) {
-    const n = Math.round(tr * tr * td / 260);
-    for (let k = 0, placed = 0; k < n * 4 && placed < n; k++) {
-      const a = rand() * Math.PI * 2, rr = tr * Math.sqrt(rand());
+    const n = Math.round(tr * tr * td / 4300);
+    for (let k = 0, placed = 0; k < n * 6 && placed < n; k++) {
+      const a = rand() * Math.PI * 2, rr = tr * 1.45 * Math.pow(rand(), 0.7);
       const x = tx + Math.cos(a) * rr, z = tz + Math.sin(a) * rr;
-      const h = heightAt(x, z);
-      if (h < SEA + 1 || h > SEA + 50 || slopeAt(x, z, h) > 0.32) continue;
-      if (rand() > 1 - (rr / tr) ** 2 * 0.6) continue;
+      const up = heightAt(x, z) - SEA;
+      if (up < 1.5 || rand() > Math.exp(-up / 42)) continue;
       placed++;
-      const big = rand() < 0.06; // 偶爾有較亮的（大樓、加油站、港口照明）
-      add(x, h + 3 + rand() * 7, z, big ? LCOL.white : pickCol(rand()), big ? 0.9 + rand() * 0.4 : 0.25 + rand() * 0.45, h < SEA + 14);
+      street(x, z, 3 + Math.floor(rand() * 6), 20 + rand() * 22);
+    }
+    // 從聚落出發的道路：先往下找到海岸，沿岸往兩邊各一條；再往山上兩條
+    let cx = tx, cz = tz;
+    for (let i = 0; i < 60 && heightAt(cx, cz) > SEA + 5; i++) {
+      const h = heightAt(cx, cz), gx = heightAt(cx + 10, cz) - h, gz = heightAt(cx, cz + 10) - h, gl = Math.hypot(gx, gz) || 1;
+      cx -= (gx / gl) * 12; cz -= (gz / gl) * 12;
+    }
+    const along = contour(cx, cz);
+    for (const sgn of [0, Math.PI]) road(cx, cz, along + sgn, tr * (2.2 + rand() * 2.2), () => 5, LCOL.sodium, 34 + rand() * 12, 0.34);
+    for (let i = 0; i < 2; i++) {
+      const top = 45 + rand() * 75, len = tr * (1.6 + rand() * 1.4);
+      road(tx, tz, rand() * Math.PI * 2, len, (s) => 8 + (top - 8) * Math.min(1, s / (len * 0.8)), rand() < 0.5 ? LCOL.sodium : LCOL.warm, 42 + rand() * 20, 0.26);
     }
   }
-  // 2) 沿岸的道路與零星人家：沿網格的每條放射線找出跨過海岸的位置
-  const NA_ = W - 1;
-  for (let j = 0; j < NA_; j++) {
-    for (let i = 8; i < radii.length - 1; i++) {
-      const h0 = H[i * W + j], h1 = H[(i + 1) * W + j], c = SEA + 3;
-      if ((h0 - c) * (h1 - c) > 0) continue;
-      const t = (c - h0) / (h1 - h0), r = radii[i] + (radii[i + 1] - radii[i]) * t;
-      if (r > 9000) continue;
-      // 往陸地那側退幾公尺
-      const back = (h1 > h0 ? 1 : -1) * 7, x = cos[j] * (r + back), z = sin[j] * (r + back);
-      const spacing = (2 * Math.PI * r) / NA_;
-      const p = (0.05 + 0.75 * Math.min(1, townNear(x, z) * 1.6)) * Math.min(1, spacing / 32);
-      if (rand() > p) continue;
-      add(x, SEA + 5 + rand() * 2, z, rand() < 0.65 ? LCOL.sodium : pickCol(rand()), 0.35 + rand() * 0.35, true);
+  // 2) 海岸邊零星的小聚落與獨棟人家：沿網格的放射線找出跨過海岸的位置
+  const NA_ = W - 1, coast = [];
+  for (let j = 0; j < NA_; j += 2) for (let i = 8; i < radii.length - 1; i++) {
+    const h0 = H[i * W + j], h1 = H[(i + 1) * W + j], c = SEA + 3;
+    if ((h0 - c) * (h1 - c) > 0) continue;
+    const r = radii[i] + (radii[i + 1] - radii[i]) * ((c - h0) / (h1 - h0)) + (h1 > h0 ? 12 : -12);
+    if (r < 9500) coast.push([cos[j] * r, sin[j] * r]);
+  }
+  for (const [x, z] of coast) {
+    const k = rand();
+    if (k < 0.035) {
+      const n = 1 + Math.floor(rand() * 3);
+      for (let m = 0; m < n; m++) street(x + (rand() - 0.5) * 90, z + (rand() - 0.5) * 90, 2 + Math.floor(rand() * 4), 18 + rand() * 16);
+      if (rand() < 0.5) road(x, z, contour(x, z) + (rand() < 0.5 ? Math.PI : 0), 250 + rand() * 500, () => 5, LCOL.sodium, 38, 0.3);
+    } else if (k < 0.085) land(x, z, pickCol(rand()), dim());
+  }
+  // 3) 山腰上零星的燈（旅館、寺、展望所）
+  for (let k = 0, n = 0; k < 4000 && n < 26; k++) {
+    const x = (rand() - 0.5) * 12000, z = -300 - rand() * 6500, up = heightAt(x, z) - SEA;
+    if (up < 40 || up > 260) continue;
+    n++;
+    street(x, z, 1 + Math.floor(rand() * 3), 16);
+  }
+  // 4) 灣裡的船（桅燈＋舷燈）
+  for (const [x, z] of [[320, -930], [-560, -2650], [980, -3050], [-150, -5300], [-1250, -1350], [1700, -1500], [150, -2300], [-300, -3600], [700, -1800]]) {
+    if (heightAt(x, z) > SEA - 2) continue;
+    add(x, SEA + 5, z, LCOL.white, 0.6, true);
+    add(x + 7, SEA + 3, z + 2, rand() < 0.5 ? LCOL.green : LCOL.red, 0.3, true);
+  }
+  // 5) 外海的漁火：一群一群很亮的白光
+  for (const [gx, gz, n] of [[-500, -7800, 4], [900, -8900, 5], [300, -6700, 3], [-1400, -9600, 4]]) {
+    for (let m = 0; m < n; m++) {
+      const x = gx + (rand() - 0.5) * 1700, z = gz + (rand() - 0.5) * 900;
+      if (heightAt(x, z) < SEA - 2) add(x, SEA + 8, z, LCOL.cool, 0.75 + rand() * 0.4, true);
     }
   }
-  // 3) 灣裡的船
-  for (const [x, z] of [[320, -930], [-560, -2650], [980, -3050], [-150, -5300], [-1250, -1350], [1700, -1500], [150, -2300]]) {
-    add(x, SEA + 4, z, LCOL.white, 0.7, true);
-    add(x + 6, SEA + 3, z + 2, rand() < 0.5 ? LCOL.green : LCOL.warm, 0.4, true);
+  // 6) 燈塔（小島的頂上、岬角）與遠方山頂的航空障礙燈
+  for (const [x, z] of [[540, -2180], [-850, -1780], [1250, -5200]]) {
+    const h = heightAt(x, z);
+    if (h > SEA) add(x, h + 12, z, LCOL.white, 1.3, true, 2);
   }
-  // 4) 遠方山頂的航空障礙燈
-  for (const [x, z] of [[-2900, -900], [3100, -3500], [-5000, -3500]]) add(x, heightAt(x, z) + 30, z, LCOL.red, 0.8, false);
+  for (const [x, z] of [[-2900, -900], [3100, -3500], [-5000, -3500], [2800, -600]]) add(x, heightAt(x, z) + 30, z, LCOL.red, 0.7, false, 1);
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('aCol', new THREE.Float32BufferAttribute(col, 3));
-  g.setAttribute('aFx', new THREE.Float32BufferAttribute(fx, 3));
+  g.setAttribute('aFx', new THREE.Float32BufferAttribute(fx, 4));
   return g;
 }
 
