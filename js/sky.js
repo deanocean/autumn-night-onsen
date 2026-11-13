@@ -1,4 +1,4 @@
-// 天空：白天的藍天、太陽與薄雲；夜晚的星空、銀河與流星；以及北面層疊的遠山。
+// 天空：白天的藍天、太陽與薄雲；夜晚的星空、銀河與流星。地形與遠山在 vista.js。
 // 天空是一顆包住整個場景的大球，顏色全部在 shader 裡依「視線方向」算出來。
 // 亮星另外用一顆顆點來畫（才能各自閃爍），銀河則是球面上的一條光帶。
 import * as THREE from 'three';
@@ -98,19 +98,7 @@ void main(){
   #include <colorspace_fragment>
 }`;
 
-function ridgeMesh(radius, y0, heightAt, seg = 220) {
-  const pos = [], idx = [];
-  for (let i = 0; i <= seg; i++) {
-    const a = (Math.PI * 2 * i) / seg;
-    const x = Math.cos(a) * radius, z = Math.sin(a) * radius;
-    pos.push(x, y0, z, x, y0 + heightAt(a), z);
-    if (i < seg) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setIndex(idx);
-  return geo;
-}
+const SKY_K = 16; // 流星的尺度（原本以 700 公尺設計，配合放大的天球）
 
 export function createSky(scene) {
   let seed = 424242;
@@ -123,7 +111,7 @@ export function createSky(scene) {
     uSunDisc: { value: 1 }, uCloud: { value: 1 },
   };
   const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(900, 48, 24),
+    new THREE.SphereGeometry(14000, 48, 24), // 比遠景的地形（約 12 公里）還大，星星才會被山擋住
     new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false, uniforms,
       vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -148,7 +136,7 @@ export function createSky(scene) {
       d.normalize();
     }
     if (d.y < -0.05) { i--; continue; }
-    t.copy(d).multiplyScalar(860);
+    t.copy(d).multiplyScalar(13500);
     pos.push(t.x, t.y, t.z);
     // 亮度分布：暗星多、亮星少；顏色由偏藍到偏橙
     const mag = Math.pow(rand(), 4.2);
@@ -189,40 +177,11 @@ export function createSky(scene) {
   scene.add(meteor);
   const m = { t: 0, dur: 0, wait: 6, from: new THREE.Vector3(), dir: new THREE.Vector3(), rate: 1 };
 
-  // --- 遠山：三層剪影，越遠越淡 ---
-  const n = (a, f, p) => Math.sin(a * f + p);
-  const far = [
-    [210, (a) => 74 + 22 * n(a, 5, 0.4) + 11 * n(a, 11, 2) + 5 * n(a, 23, 1.3) + 2.5 * n(a, 47, 0.2)],
-    [330, (a) => 118 + 32 * n(a, 4, 1.7) + 15 * n(a, 9, 0.3) + 7 * n(a, 19, 2.2) + 3 * n(a, 41, 1.0)],
-    [470, (a) => 172 + 44 * n(a, 3, 2.9) + 20 * n(a, 8, 1.1) + 9 * n(a, 17, 0.7) + 4 * n(a, 37, 2.6)],
-  ].map(([r, hf]) => {
-    const mesh = new THREE.Mesh(ridgeMesh(r, -40, hf), new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, fog: false }));
-    scene.add(mesh);
-    return mesh;
-  });
-
-  // --- 夜晚谷底與對岸的燈火 ---
-  const lp = [], lc = [];
-  for (let i = 0; i < 150; i++) {
-    const a = -Math.PI / 2 + (rand() - 0.5) * 1.5, r = 120 + rand() * 80;
-    const cl = Math.floor(rand() * 5);
-    lp.push(Math.cos(a) * r + (cl - 2) * 9, -34 + rand() * (r > 170 ? 26 : 5), Math.sin(a) * r);
-    const w = 0.5 + rand() * 0.5;
-    lc.push(1.0 * w, (0.62 + rand() * 0.2) * w, (0.28 + rand() * 0.25) * w);
-  }
-  const tg = new THREE.BufferGeometry();
-  tg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
-  tg.setAttribute('color', new THREE.Float32BufferAttribute(lc, 3));
-  const town = new THREE.Points(tg, new THREE.PointsMaterial({
-    size: 2.4 * Math.min(devicePixelRatio, 2), sizeAttenuation: false, vertexColors: true,
-    transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-  }));
-  town.frustumCulled = false;
-  scene.add(town);
+  // 遠山與夜景燈火在 vista.js
 
   const tmp = new THREE.Vector3();
   return {
-    dome, stars, far, town, uniforms, meteor: m,
+    dome, stars, uniforms, meteor: m,
     update(dt, camera) {
       dome.position.copy(camera.position);
       stars.position.copy(camera.position);
@@ -233,16 +192,16 @@ export function createSky(scene) {
           const k = m.t / m.dur;
           if (k >= 1) { meteor.visible = false; m.wait = (5 + rand() * 14) / m.rate; }
           else {
-            const len = 55 + 40 * Math.sin(k * Math.PI);
-            tmp.copy(m.from).addScaledVector(m.dir, k * 260);
+            const len = (55 + 40 * Math.sin(k * Math.PI)) * SKY_K;
+            tmp.copy(m.from).addScaledVector(m.dir, k * 260 * SKY_K);
             meteor.position.copy(camera.position).add(tmp);
-            meteor.scale.set(len, 1.3, 1);
+            meteor.scale.set(len, 1.3 * SKY_K, 1);
             meteor.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), m.dir);
             meteorMat.uniforms.uA.value = Math.sin(k * Math.PI) * G.night.value;
           }
         } else if ((m.wait -= dt) <= 0) {
           const az = -Math.PI / 2 + (rand() - 0.5) * 2.2, el = 0.5 + rand() * 0.6;
-          m.from.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)).multiplyScalar(700);
+          m.from.set(Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)).multiplyScalar(700 * SKY_K);
           m.dir.set(rand() - 0.5, -0.35 - rand() * 0.4, rand() - 0.5).normalize();
           // 讓軌跡大致垂直於視線，才看得到一道長線
           tmp.copy(m.from).normalize();

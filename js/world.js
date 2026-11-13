@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import * as L from './layout.js';
 import { patch } from './shaders.js';
 import { G } from './env.js';
+import { shojiTextures } from './shoji.js';
 
 const std = (o = {}) => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, ...o });
 
@@ -34,8 +35,8 @@ export function wood(color, grain = 0, plank = 0, weather = 0.45, plankY = false
 }
 const CEDAR = 0x7a5740, CEDAR_DARK = 0x5c4433, HINOKI = 0xb08a5c, BOARD = 0x8a6646;
 const DECK_WOOD = 0x6f5d4c; // 望景台：日曬雨淋後褪成灰褐的木板
-const SHOJI_NIGHT = 0.45;    // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
-const SHOJI_ALBEDO = 0.24;   // 夜晚窗紙反光的比例（1 = 和白天一樣白）
+const SHOJI_NIGHT = 0.95;    // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
+const SHOJI_ALBEDO = 0.2;    // 夜晚窗紙反光的比例（1 = 和白天一樣白）
 
 function mesh(g, geo, m, x, y, z, shadow = true) {
   const o = new THREE.Mesh(geo, m);
@@ -160,96 +161,30 @@ function textTexture(text, { bg, fg, size = 150, w = 256, h = 256, font = '600',
   return t;
 }
 
-// 和紙貼圖：米白底、雲狀濃淡、細纖維絲（很淡，不能髒）
-function paperTexture(size = 512) {
-  const c = document.createElement('canvas');
-  c.width = c.height = size;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#f4ead4'; ctx.fillRect(0, 0, size, size);
-  // 雲狀濃淡：低解析雜訊放大
-  const g = 64, small = document.createElement('canvas');
-  small.width = small.height = g;
-  const sc = small.getContext('2d'), img = sc.createImageData(g, g);
-  for (let y = 0; y < g; y++) for (let x = 0; x < g; x++) {
-    const v = fbm(x * 0.13, y * 0.13, 1.7), k = (v - 0.44) * 2.2; // 約 -1..1
-    const o = (y * g + x) * 4;
-    img.data[o] = k > 0 ? 255 : 120; img.data[o + 1] = k > 0 ? 255 : 90; img.data[o + 2] = k > 0 ? 255 : 40;
-    img.data[o + 3] = Math.min(255, Math.abs(k) * 34);
-  }
-  sc.putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(small, 0, 0, size, size);
-  // 纖維絲
-  const r = rng(77);
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 700; i++) {
-    const x = r() * size, y = r() * size, a = r() * Math.PI, l = 6 + r() * 26;
-    ctx.strokeStyle = r() < 0.5 ? `rgba(255,255,255,${0.25 + r() * 0.3})` : `rgba(150,115,70,${0.05 + r() * 0.07})`;
-    ctx.beginPath(); ctx.moveTo(x, y);
-    ctx.quadraticCurveTo(x + Math.cos(a) * l * 0.5 + (r() - 0.5) * 6, y + Math.sin(a) * l * 0.5 + (r() - 0.5) * 6, x + Math.cos(a) * l, y + Math.sin(a) * l);
-    ctx.stroke();
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 8;
-  return t;
-}
-
-// 長滿秋天樹林的坡面顏色：以位置雜訊混出一塊塊樹冠（2–4 公尺），明度低、彩度低，退到背景
-const FOREST = [0x4a2a24, 0x6e4a2c, 0x7a6230, 0x2c3d2e, 0x1d2622, 0x5a3a28].map((h) => new THREE.Color(h));
-function forestColor(x, y, z, out) {
-  const s = Math.min(0.999, fbm(x / 3.3, y / 3.3, z / 3.3) * 1.15) * (FOREST.length - 1);
-  const i = Math.floor(s), f = s - i;
-  out.copy(FOREST[i]).lerp(FOREST[i + 1], f * f * (3 - 2 * f));
-  // 冠層內的明暗與陰影暗部
-  const v = 0.8 + 0.45 * fbm(x / 1.2 + 11, y / 1.2 + 4, z / 1.2 + 8);
-  const sh = fbm(x / 5 + 40, y / 5, z / 5 + 13) < 0.3 ? 0.62 : 1;
-  out.multiplyScalar(v * sh);
-  return out;
-}
-const forestMat = () => new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 1, side: THREE.DoubleSide });
-
-// 環繞的近山：格網 + 雜訊起伏 + 頂點色
-function forestRidge(g, radius, y0, heightAt, a0, a1, seg = 200, rows = 28) {
-  const pos = [], col = [], idx = [], c = new THREE.Color();
-  for (let i = 0; i <= seg; i++) {
-    const a = a0 + ((a1 - a0) * i) / seg;
-    for (let j = 0; j <= rows; j++) {
-      const t = j / rows, hgt = heightAt(a) * t;
-      const r = radius + (fbm(a * 20, t * 6, 3) - 0.44) * 5 + t * 1.5;
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      const y = y0 + hgt + (fbm(a * 40, t * 9, 8) - 0.44) * 2.2 * Math.min(1, t * 4);
-      pos.push(x, y, z);
-      forestColor(x, y * 1.4, z, c); col.push(c.r, c.g, c.b);
-      if (i < seg && j < rows) { const k = i * (rows + 1) + j; idx.push(k, k + 1, k + rows + 1, k + 1, k + rows + 2, k + rows + 1); }
-    }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  g.add(new THREE.Mesh(geo, forestMat()));
-}
-
 export function buildWorld(scene) {
-  // 窗紙：與燈籠共用的 M.paper 分開，貼和紙貼圖（emissiveMap 讓透光有濃淡）
-  const paperMap = paperTexture();
-  const SHOJI = new THREE.MeshStandardMaterial({ color: 0xf3e3c2, map: paperMap, emissive: 0xffc27a, emissiveMap: paperMap, emissiveIntensity: M.paper.emissiveIntensity, roughness: 1 });
+  // 窗紙：與燈籠共用的 M.paper 分開。日間 map 是單純的和紙；夜裡的影絵畫在各窗自己的 emissiveMap（見 shoji.js）。
+  const ST = shojiTextures(fbm, rng);
   // 夜間發光強度由 daynight.js 驅動 M.paper；窗紙用 getter 直接跟著它（不必改 daynight.js）
   // G.house 降到 0（場內的燈全熄）時，窗內也只剩一點餘光
-  const SHOJI_COL = SHOJI.color.clone();
-  Object.defineProperty(SHOJI, 'emissiveIntensity', {
-    // 夜裡窗紙比燈籠暗（SHOJI_NIGHT）：整面窗都亮到泛白會搶過燈籠，也看不出和紙的濃淡。
-    // 窗前那兩盞代表「窗內透出的光」的點光源會把白紙照到過曝，所以夜裡也把紙的反光壓低（SHOJI_ALBEDO），
-    // 讓窗的亮度主要來自自己的透光。three 每畫一次都會讀這個值，順便在這裡更新顏色。
-    get: () => {
-      const p = M.paper.emissiveIntensity, n = G.night.value, h = G.house.value;
-      SHOJI.color.copy(SHOJI_COL).multiplyScalar(1 - (1 - SHOJI_ALBEDO) * n);
-      return p * (1 - (1 - SHOJI_NIGHT) * n) * h + Math.min(p, 0.12) * (1 - 0.75 * n) * (1 - h);
-    },
-    set() {}, configurable: true,
-  });
+  const shojiMat = (emap) => {
+    const m = new THREE.MeshStandardMaterial({ color: 0xf3e3c2, map: ST.plain, emissive: 0xffc27a, emissiveMap: emap, emissiveIntensity: M.paper.emissiveIntensity, roughness: 1 });
+    const col = m.color.clone();
+    Object.defineProperty(m, 'emissiveIntensity', {
+      // 夜裡窗紙略暗於燈籠（SHOJI_NIGHT）；窗前那兩盞「窗內透出的光」點光源會把白紙照到過曝，
+      // 所以夜裡把紙的反光壓低（SHOJI_ALBEDO），亮度主要來自自己的透光與影絵的對比。
+      // three 每畫一次都會讀這個值，順便在這裡更新顏色。
+      get: () => {
+        const p = M.paper.emissiveIntensity, n = G.night.value, h = G.house.value;
+        m.color.copy(col).multiplyScalar(1 - (1 - SHOJI_ALBEDO) * n);
+        return p * (1 - (1 - SHOJI_NIGHT) * n) * h + Math.min(p, 0.12) * (1 - 0.75 * n) * (1 - h);
+      },
+      set() {}, configurable: true,
+    });
+    return m;
+  };
+  const SHOJI = shojiMat(ST.plain);
+  const SHOJI_LOWER = { 1: shojiMat(ST.panels[0]), 2: shojiMat(ST.panels[1]), 5: shojiMat(ST.panels[2]), 6: shojiMat(ST.panels[3]) };
+  const SHOJI_ROUND = shojiMat(ST.round);
   const world = new THREE.Group();
   scene.add(world);
   const rand = rng(20261110);
@@ -260,7 +195,8 @@ export function buildWorld(scene) {
   for (let i = 0; i < N; i++) rim.push(L.poolPoint((i / N) * Math.PI * 2));
   {
     const shape = new THREE.Shape();
-    shape.moveTo(-46, 12.6); shape.lineTo(46, 12.6); shape.lineTo(46, -46); shape.lineTo(-46, -46); shape.closePath();
+    // 只鋪到竹垣外一點；再往外是 vista.js 的地形（平台高度略低 5 公分，接縫看不出來）
+    shape.moveTo(-16, 12.6); shape.lineTo(16, 12.6); shape.lineTo(16, -22); shape.lineTo(-16, -22); shape.closePath();
     const hole = new THREE.Path();
     rim.forEach(([x, z], i) => (i ? hole.lineTo(x, -z) : hole.moveTo(x, -z)));
     hole.closePath();
@@ -347,9 +283,9 @@ export function buildWorld(scene) {
     wbox(world, w, 0.18, 0.14, cx, wallTop - 0.1, front - 0.04, CEDAR_DARK); // 上層桁
 
     // --- 下層各開間 ---
-    const shoji = (bx, inner, y0, y1, cols, rows) => {
+    const shoji = (bx, inner, y0, y1, cols, rows, mat = SHOJI) => {
       const hh = y1 - y0;
-      box(world, inner, hh, 0.02, bx, (y0 + y1) / 2, front + 0.03, SHOJI).castShadow = false;
+      box(world, inner, hh, 0.02, bx, (y0 + y1) / 2, front + 0.03, mat).castShadow = false;
       for (let c = 1; c < cols; c++) wbox(world, 0.018, hh, 0.025, bx - inner / 2 + (inner * c) / cols, (y0 + y1) / 2, front, CEDAR_DARK).castShadow = false;
       for (let r = 1; r < rows; r++) wbox(world, inner, 0.018, 0.025, bx, y0 + (hh * r) / rows, front, CEDAR_DARK).castShadow = false;
       wbox(world, inner, 0.05, 0.06, bx, y0 - 0.02, front - 0.01, CEDAR_DARK);
@@ -380,7 +316,7 @@ export function buildWorld(scene) {
       if (i === ROUND) {
         // 丸窗
         const cy = E.y + 1.52, R = 0.52;
-        const disc = mesh(world, new THREE.CircleGeometry(R, 40), SHOJI, bx, cy, front - 0.005, false);
+        const disc = mesh(world, new THREE.CircleGeometry(R, 40), SHOJI_ROUND, bx, cy, front - 0.005, false);
         disc.rotation.y = Math.PI;
         const ring = mesh(world, new THREE.TorusGeometry(R, 0.045, 8, 48), wood(CEDAR_DARK, 0), bx, cy, front - 0.02, false);
         ring.rotation.y = Math.PI;
@@ -390,7 +326,7 @@ export function buildWorld(scene) {
           wbox(world, hl, 0.02, 0.02, bx, cy + t * R, front - 0.02, CEDAR_DARK).castShadow = false;
         }
       } else if (i !== 0 && i !== bays - 1) {
-        shoji(bx, inner, E.y + 0.95, E.y + 2.08, 7, 4);
+        shoji(bx, inner, E.y + 0.95, E.y + 2.08, 7, 4, SHOJI_LOWER[i]);
       }
     }
 
@@ -588,29 +524,7 @@ export function buildWorld(scene) {
     s.castShadow = false;
   });
 
-  // ---------- 北側山坡、谷底與三面的近山（遠山在 sky.js） ----------
-  {
-    const sg = new THREE.PlaneGeometry(92, 60, 184, 120), sp = sg.attributes.position, sc = [], cc = new THREE.Color();
-    for (let k = 0; k < sp.count; k++) {
-      const px = sp.getX(k), py = sp.getY(k);
-      // 沿坡面法線方向起伏：大尺度的山勢 + 樹冠凹凸
-      const edge = Math.min(1, (46 - Math.abs(px)) / 6);
-      sp.setZ(k, ((fbm(px / 9, py / 9, 5) - 0.44) * 9 + (fbm(px / 2.6, py / 2.6, 9) - 0.44) * 2.4) * edge);
-      forestColor(px, py, 0, cc); sc.push(cc.r, cc.g, cc.b);
-    }
-    sg.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3));
-    sg.computeVertexNormals();
-    const slope = new THREE.Mesh(sg, forestMat());
-    slope.rotation.x = -Math.PI / 2 + 0.62;
-    slope.position.set(0, -17.5, -37.2);
-    world.add(slope);
-    const valley = new THREE.Mesh(new THREE.PlaneGeometry(1600, 1600), std({ color: 0x5e6a5a }));
-    valley.rotation.x = -Math.PI / 2;
-    valley.position.y = -36;
-    world.add(valley);
-    const n = (a, f, p) => Math.sin(a * f + p);
-    forestRidge(world, 48, -2, (a) => 16 + 6 * n(a, 3, 1) + 3 * n(a, 7, 2), -0.28, Math.PI + 0.28);
-  }
+  // 北側山坡、海灣與四周的山在 vista.js
 
   return { world, lamps };
 }

@@ -5,6 +5,7 @@ import { createTrees } from './trees.js';
 import { createWater } from './water.js';
 import { createSteam } from './steam.js';
 import { createSky } from './sky.js';
+import { createVista, slopeTreeSpots } from './vista.js';
 import { createLights } from './lights.js';
 import { createDayNight } from './daynight.js';
 import { createGuides } from './labels.js';
@@ -53,14 +54,15 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.03;
 scene.add(sun);
 
-const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 1500);
+const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 15000);
 
 const { world, lamps } = buildWorld(scene);
 const props = createProps(world);
-const trees = createTrees(scene, world);
+const trees = createTrees(scene, world, slopeTreeSpots());
 const water = createWater(scene);
 createSteam(scene);
 const sky = createSky(scene);
+const vista = createVista(scene, { sun, hemi });
 const lights = createLights(scene, props.lanterns, lamps);
 const dayNight = createDayNight({ scene, renderer, sun, hemi, sky, lights });
 const guides = createGuides(scene);
@@ -140,6 +142,7 @@ async function warmUp() {
   for (const night of [true, false]) {
     dayNight.set(night, true);
     sky.update(0, camera);
+    vista.update(0);
     renderer.render(scene, camera);
   }
   hidden.forEach((o) => { o.visible = false; });
@@ -156,6 +159,7 @@ function frame() {
   dayNight.update(dt);
   interact.update(dt);
   sky.update(dt, camera);
+  vista.update(dt);
   audio.update(dt, interact.mode === 'soak');
   guides.update(player, camera);
   renderer.render(scene, guides.top ? guides.topCam : camera);
@@ -163,7 +167,7 @@ function frame() {
 }
 
 // 供自動檢查使用
-window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, trees, props, water, interact, audio, ready: false };
+window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, vista, trees, props, water, interact, audio, ready: false };
 
 startBtn.disabled = true;
 startBtn.textContent = '準備中…';

@@ -9,22 +9,19 @@ const C = (hex) => new THREE.Color(hex);
 const KEY = {
   //            白天            黃昏            夜晚
   skyTop:     [C(0x3f7fca), C(0x39508f), C(0x04070f)],
-  skyHorizon: [C(0xcfdbe8), C(0xf2a877), C(0x0d1626)],
+  skyHorizon: [C(0xcfdbe8), C(0xf2a877), C(0x122039)],
   fog:        [C(0xcfdbe8), C(0xd9a288), C(0x070b14)],
   sunCol:     [C(0xfff0d0), C(0xff9a55), C(0x8fa6d8)],
   ambient:    [C(0xeef2ff), C(0xc9a79a), C(0x18202e)],
   steam:      [C(0xffffff), C(0xf2cdb8), C(0x2a3442)],
   hemiSky:    [C(0xcfe0f5), C(0xd9b0a0), C(0x2c3a5c)],
   hemiGround: [C(0x8a7862), C(0x7a5a48), C(0x10131a)],
-  far0:       [C(0x7f8ca6), C(0x6a5878), C(0x05080f)],
-  far1:       [C(0x9eabc2), C(0x94708a), C(0x070b14)],
-  far2:       [C(0xbac6d6), C(0xc79a92), C(0x0a0f1a)],
 };
 const NUM = {
   sunI:   [2.7, 1.4, 0.10],
   hemiI:  [1.25, 0.85, 0.30],
   expo:   [1.0, 1.0, 1.05],
-  fogFar: [600, 520, 900],
+  fogFar: [3000, 2600, 3500],
 };
 const SUN_DAY = new THREE.Vector3(-0.5, 0.72, 0.48).normalize();
 const SUN_DUSK = new THREE.Vector3(-0.86, 0.12, 0.2).normalize();
@@ -53,7 +50,6 @@ export function createDayNight({ scene, renderer, sun, hemi, sky, lights }) {
     mix3(KEY.hemiSky, n, hemi.color);
     mix3(KEY.hemiGround, n, hemi.groundColor);
     hemi.intensity = num3(NUM.hemiI, n);
-    sky.far.forEach((m, i) => mix3(KEY['far' + i], n, m.material.color));
 
     // 主光：白天是太陽，落到地平線後淡出，再由夜晚的天光接手
     if (n < 0.5) G.sunDir.value.copy(SUN_DAY).lerp(SUN_DUSK, n * 2).normalize();
@@ -69,7 +65,6 @@ export function createDayNight({ scene, renderer, sun, hemi, sky, lights }) {
     G.sunSpec.value = day;
     G.caustic.value = day;
     G.steamDensity.value = 1 + n * 0.25;
-    sky.town.material.opacity = Math.max(0, n * 2 - 1);
     renderer.toneMappingExposure = num3(NUM.expo, n);
 
     // 燈火隨天色暗下來而亮起

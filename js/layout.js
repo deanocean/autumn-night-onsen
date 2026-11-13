@@ -1,6 +1,6 @@
 // 場景的「平面圖」：所有尺寸、位置、碰撞與地面高度都定義在這裡。
 // 之後各階段（材質、水、植栽、互動）都讀這份資料，配置只需要改這一處。
-// 座標：x 向東、z 向南、y 向上；單位公尺。北側（-z）朝山谷敞開。
+// 座標：x 向東、z 向南、y 向上；單位公尺。北側（-z）是崖邊，俯瞰海灣。
 
 export const POOL = { cx: 0, cz: -1, a: 7.0, b: 4.6, depth: 0.75, waterY: -0.12 };
 
@@ -162,7 +162,7 @@ export const LABELS = [
   ['池中大岩', CENTER_ROCK.x, 1.9, CENTER_ROCK.z],
   ['湯口', YUGUCHI.x + 0.6, 2.6, YUGUCHI.z],
   ['望景木台', 0, 2.4, -10.5],
-  ['山谷・遠山（敞開面）', 0, 5.5, -26],
+  ['海灣・遠山（敞開面）', 0, 5.5, -26],
   ['鹿威し', PROPS.shishi.x, 1.6, PROPS.shishi.z],
   ['木桶', PROPS.oke.x, 1.2, PROPS.oke.z],
   ['牛奶', PROPS.milk.x, 1.7, PROPS.milk.z],
