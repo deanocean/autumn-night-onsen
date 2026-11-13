@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { G } from './env.js';
 import { GLSL_NOISE } from './shaders.js';
-import { SEA, heightAt, TOWNS, PLATEAU, R_MAX } from './terrain.js';
+import { SEA, heightAt, TOWNS, PLATEAU, R_MAX, sstep } from './terrain.js';
 
 const NA = 720; // 一圈的格數
 const EYE_Y = 1.85;
@@ -30,6 +30,25 @@ varying vec3 vW; varying float vH; varying vec3 vN; varying float vRefl;
 void main(){
   vW = position; vH = aH; vN = normal; vRefl = aRefl;
   gl_Position = projectionMatrix * viewMatrix * vec4(position, 1.0);
+}`;
+
+// 雲影與空氣遠近：地形與房子共用，兩者才會一起變淡、一起落在同一片雲影裡
+const GLSL_AIR = /* glsl */ `
+float cloudShade(vec3 P, float dist){
+  float cs = fbm(vec3(P.xz / 2600.0 + vec2(uTime * 0.004, 0.0), 12.0));
+  return mix(1.0, 0.42 + 0.58 * rs(0.38, 0.6, cs), rs(250.0, 1200.0, dist));
+}
+vec3 applyAir(vec3 col, vec3 P, float dist, float water){
+  float dens = (1.0 / uAir) * (1.0 + 0.35 * exp(-max(P.y - SEA, 0.0) / 90.0));
+  float hz = 1.0 - exp(-dist * dens);
+  // 中距離的靄偏藍（天空的散射光），越遠越接近地平線的顏色；海平線留一線比天空深一點的藍
+  vec3 hcol = mix(mix(uHaze, uSkyTop, 0.5 * (1.0 - uNight)), uSkyHorizon, 0.6 * rs(6000.0, 36000.0, dist));
+  // 海面不會褪成天空的顏色：遠處仍是比天空深的藍，海平線才看得出來
+  hcol = mix(hcol, mix(uHaze, uSkyTop, 0.62) * mix(0.9, 1.0, uNight), water);
+  hz = min(hz, mix(0.97, 0.9, water));
+  col = mix(col, hcol, hz);
+
+  return col;
 }`;
 
 const frag = /* glsl */ `
@@ -64,6 +83,7 @@ float townMask(vec2 p){
   return m;
 }
 
+${GLSL_AIR}
 vec3 skyAt(vec3 d){ return mix(uSkyHorizon, uSkyTop, pow(clamp(d.y, 0.0, 1.0), 0.5)); }
 
 void main(){
@@ -159,18 +179,16 @@ void main(){
   alb = mix(alb, floorC, floorM);
   nL = normalize(mix(nL, N, floorM));
 
-  // 聚落：灰白、藍灰、紅褐的屋頂與其間的庭木
+  // 聚落的地面：房子是另外蓋的實體（buildHouses），這裡只畫房子之間的巷道、空地（灰）與菜園、庭木（綠）
   float town = townMask(P.xz) * rs(0.6, 0.85, N.y) * rs(95.0, 30.0, h) * step(0.0, h);
   float townLit = 0.0;
   if (town > 0.01) {
-    vec2 bq = P.xz / 9.0; vec2 bc = floor(bq), bf = fract(bq);
-    float bh = hash21(bc + 7.0), dens = town * (0.35 + 0.55 * fbm2(vec3(P.xz / 70.0, 9.0)));
-    float bld = step(bh, dens) * rs(0.48, 0.38, max(abs(bf.x - 0.5), abs(bf.y - 0.5)));
-    float k = fract(bh * 53.1);
-    vec3 roof = k < 0.35 ? vec3(0.55, 0.56, 0.56) : k < 0.55 ? vec3(0.27, 0.31, 0.36) : k < 0.8 ? vec3(0.78, 0.77, 0.73) : vec3(0.42, 0.26, 0.19);
-    vec3 ground = mix(vec3(0.13, 0.17, 0.09), vec3(0.34, 0.33, 0.31), 0.4);
-    vec3 tc = mix(mix(ground, roof, bld), mix(ground, vec3(0.42, 0.41, 0.40), dens * 0.5) * (0.6 + 0.8 * vnoise(vec3(P.xz / max(px * 2.5, 9.0), 4.4))), rs(0.3, 1.2, px / 9.0));
-    alb = mix(alb, tc, town);
+    float dens = town * (0.35 + 0.55 * fbm2(vec3(P.xz / 70.0, 9.0)));
+    float gk = fbm2(vec3(P.xz / max(px * 2.0, 14.0), 4.4));
+    vec3 paved = mix(vec3(0.17, 0.17, 0.165), vec3(0.29, 0.28, 0.25), gk);
+    vec3 green = mix(alb, vec3(0.15, 0.19, 0.075), 0.5);
+    vec3 tc = mix(green, paved, rs(0.3, 0.55, fbm2(vec3(P.xz / 26.0, 6.1))) * (0.45 + 0.55 * dens));
+    alb = mix(alb, tc, town * 0.9);
     nL = normalize(mix(nL, N, town));
     townLit = town * dens;
   }
@@ -179,8 +197,7 @@ void main(){
   alb = mix(alb, vec3(0.50, 0.48, 0.44), shore * 0.85);
 
   // 雲影：幾公里大的明暗緩緩移動，山與海才有光影的層次（太陽在觀看者背後，少了它整片是平光）
-  float cs = fbm(vec3(P.xz / 2600.0 + vec2(uTime * 0.004, 0.0), 12.0));
-  float shade = mix(1.0, 0.42 + 0.58 * rs(0.38, 0.6, cs), rs(250.0, 1200.0, dist));
+  float shade = cloudShade(P, dist);
   float sunT = max(dot(nL, L), 0.0) * shade;
   vec3 irr = uSunCol * uSunI * sunT + mix(uHemiGround, uHemiSky, nL.y * 0.5 + 0.5) * uHemiI;
   // 聚落的燈火把附近的地面、山腳與海面染上一片暖色
@@ -224,14 +241,7 @@ void main(){
   vec3 col = mix(land, sea, water);
 
   // ---------- 空氣遠近：一層比一層淡、一層比一層藍，是遠景層次的主要來源；低處（海面附近）的靄比較濃 ----------
-  float dens = (1.0 / uAir) * (1.0 + 0.35 * exp(-max(P.y - SEA, 0.0) / 90.0));
-  float hz = 1.0 - exp(-dist * dens);
-  // 中距離的靄偏藍（天空的散射光），越遠越接近地平線的顏色；海平線留一線比天空深一點的藍
-  vec3 hcol = mix(mix(uHaze, uSkyTop, 0.5 * (1.0 - uNight)), uSkyHorizon, 0.6 * rs(6000.0, 36000.0, dist));
-  // 海面不會褪成天空的顏色：遠處仍是比天空深的藍，海平線才看得出來
-  hcol = mix(hcol, mix(uHaze, uSkyTop, 0.62) * mix(0.9, 1.0, uNight), water);
-  hz = min(hz, mix(0.97, 0.9, water));
-  col = mix(col, hcol, hz);
+  col = applyAir(col, P, dist, water);
 
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
@@ -280,6 +290,9 @@ void main(){
   vA = aFx.x * uLit * tw * exp(-d / 16000.0);
   vC = aCol;
   gl_Position = projectionMatrix * mv;
+  // 深度往前挪 4%（比房子的 2% 多）：燈立在房子之間，不這樣會被旁邊的房子吃掉大半
+  vec4 nearer = projectionMatrix * vec4(mv.xyz * 0.96, 1.0);
+  gl_Position.z = nearer.z / nearer.w * gl_Position.w;
   gl_PointSize = uPx * (2.6 + 3.6 * aFx.x) * clamp(1500.0 / d, 0.66, 2.0);
   // 種類 3：聚落上空的光暈（aFx.x 是半徑，公尺），不閃
   if (aFx.w > 2.5) { vA = uLit * 0.036 * exp(-d / 16000.0) * smoothstep(900.0, 2600.0, d); gl_PointSize = uPx * clamp(aFx.x * 640.0 / d, 6.0, 200.0); }
@@ -336,6 +349,8 @@ void main(){
 
 // 夜景的燈量：1 是 2026-11-13 第二輪的量（使用者嫌少），整體照比例增減
 const LIGHT_DENSITY = 2.8;
+// 最密的幾個聚落（密度 0.9 以上：主灣兩岸與對岸兩個灣口）再照這個比例減：使用者覺得 7750 盞稍多，要從最密的地方減到約 7000 盞
+const DENSE_TRIM = 0.83;
 const LCOL = {
   warm: [1.0, 0.8, 0.52], sodium: [1.0, 0.56, 0.2], white: [0.92, 0.93, 0.95], cool: [0.75, 0.86, 1.0], red: [1.0, 0.12, 0.08], green: [0.4, 1.0, 0.6],
 };
@@ -346,6 +361,7 @@ function pickCol(r) { return r < 0.45 ? LCOL.warm : r < 0.72 ? LCOL.sodium : r <
 // 海岸邊零星的小聚落、灣裡的船與外海的漁火、岬角的燈塔、山頂的航空障礙燈。
 function buildLights(radii, H, W, cos, sin, rand) {
   const pos = [], col = [], fx = [];
+  const hamlets = []; // [x, z, 棟數, 種類（0 民家、1 山腰的旅館或寺）]：聚落以外有燈的地方，白天在同一處蓋房子（buildHouses）
   const add = (x, y, z, c, i, refl, kind = 0) => { pos.push(x, y, z); col.push(...c); fx.push(i, rand(), refl ? 1 : 0, kind); };
   // 陸上的一盞燈；燈前（朝觀看者那側）不遠就是海的，才在海面拉出倒影
   const land = (x, z, c, i, lift = 5) => {
@@ -393,7 +409,7 @@ function buildLights(radii, H, W, cos, sin, rand) {
 
   // 1) 聚落：中心密、往外與往山上漸疏（燈量看 LIGHT_DENSITY）
   for (const [tx, tz, tr, td] of TOWNS) {
-    const n = Math.round(tr * tr * td / 4300 * LIGHT_DENSITY);
+    const n = Math.round(tr * tr * td / 4300 * LIGHT_DENSITY * (td >= 0.9 ? DENSE_TRIM : 1));
     for (let k = 0, placed = 0; k < n * 6 && placed < n; k++) {
       const a = rand() * Math.PI * 2, rr = tr * 1.5 * Math.pow(rand(), 0.75);
       const x = tx + Math.cos(a) * rr, z = tz + Math.sin(a) * rr;
@@ -440,9 +456,13 @@ function buildLights(radii, H, W, cos, sin, rand) {
     const k = rand();
     if (k < 0.07) {
       const n = 1 + Math.floor(rand() * 4);
-      for (let m = 0; m < n; m++) street(x + (rand() - 0.5) * 110, z + (rand() - 0.5) * 110, 2 + Math.floor(rand() * 5), 18 + rand() * 16);
+      for (let m = 0; m < n; m++) {
+        const sx = x + (rand() - 0.5) * 110, sz = z + (rand() - 0.5) * 110, sn = 2 + Math.floor(rand() * 5);
+        street(sx, sz, sn, 18 + rand() * 16);
+        hamlets.push([sx, sz, sn, 0]);
+      }
       if (rand() < 0.6) road(x, z, contour(x, z) + (rand() < 0.5 ? Math.PI : 0), 300 + rand() * 700, () => 5, LCOL.sodium, 34, 0.36);
-    } else if (k < 0.2) land(x, z, pickCol(rand()), dim());
+    } else if (k < 0.2) { if (land(x, z, pickCol(rand()), dim())) hamlets.push([x, z, 1, 0]); }
   }
   // 3) 山腰上零星的燈（旅館、寺、展望所）
   for (let k = 0, n = 0; k < 8000 && n < 70; k++) {
@@ -450,6 +470,7 @@ function buildLights(radii, H, W, cos, sin, rand) {
     if (up < 40 || up > 320) continue;
     n++;
     street(x, z, 1 + Math.floor(rand() * 3), 16);
+    hamlets.push([x, z, 1, 1]);
   }
   // 4) 灣裡的船（桅燈＋舷燈）
   for (const [x, z] of [[320, -930], [-560, -2650], [980, -3050], [-150, -5300], [-1250, -1350], [1700, -1500], [150, -2300], [-300, -3600], [700, -1800]]) {
@@ -479,6 +500,185 @@ function buildLights(radii, H, W, cos, sin, rand) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('aCol', new THREE.Float32BufferAttribute(col, 3));
   g.setAttribute('aFx', new THREE.Float32BufferAttribute(fx, 4));
+  return { geo: g, hamlets };
+}
+
+// ---------- 聚落的建築 ----------
+// 白天從望景台看得出一棟棟的房子：每棟是一個方盒加山形屋頂（平屋頂的大樓把屋頂高設成 0），全部合成一個 instanced mesh。
+// 排法跟燈火一樣是「沿等高線的一條條街」，街的兩側各一排；港邊有幾棟長長的倉庫，中心偶爾有幾層樓的大樓。
+const houseVert = /* glsl */ `
+attribute vec3 aK;   // 是否屋頂、沿牆面的座標（-0.5～0.5）、牆面沿哪個軸（0 長邊、1 短邊）
+attribute vec4 aPos; // x、地面高、z、朝向
+attribute vec4 aDim; // 長、牆高、深、屋頂高
+attribute vec3 aRoof, aWall;
+varying vec3 vW, vRoof, vWall; varying float vK, vTop; varying vec2 vUv;
+void main(){
+  // 牆腳往地下多埋 3 公尺，蓋在斜坡上才不會懸空
+  float y = position.y < 0.5 ? -3.0 : aDim.y + aDim.w * (position.y - 1.0);
+  vec2 l = position.xz * aDim.xz;
+  float c = cos(aPos.w), s = sin(aPos.w);
+  vW = vec3(aPos.x + l.x * c - l.y * s, aPos.y + y, aPos.z + l.x * s + l.y * c);
+  vK = aK.x; vTop = aDim.y; vRoof = aRoof; vWall = aWall;
+  vUv = vec2(aK.y * (aK.z > 0.5 ? aDim.z : aDim.x), y);
+  vec4 mv = viewMatrix * vec4(vW, 1.0);
+  gl_Position = projectionMatrix * mv;
+  // 深度往前挪 2%：幾公里外的深度精度不夠分辨房子與它腳下的地面
+  vec4 nearer = projectionMatrix * vec4(mv.xyz * 0.98, 1.0);
+  gl_Position.z = nearer.z / nearer.w * gl_Position.w;
+}`;
+const houseFrag = /* glsl */ `
+uniform vec3 uSunDir, uSunCol, uHemiSky, uHemiGround, uHaze, uSkyTop, uSkyHorizon;
+uniform float uSunI, uHemiI, uNight, uTime, uLit, uAir;
+varying vec3 vW, vRoof, vWall; varying float vK, vTop; varying vec2 vUv;
+${GLSL_NOISE}
+const float SEA = ${SEA.toFixed(1)};
+const float PI = 3.14159265;
+${GLSL_AIR}
+void main(){
+  vec3 toC = cameraPosition - vW; float dist = length(toC); vec3 V = toC / dist;
+  vec3 N = normalize(cross(dFdx(vW), dFdy(vW)));
+  if (dot(N, V) < 0.0) N = -N;
+  vec3 alb;
+  if (vK > 0.5) {
+    alb = vRoof;
+  } else {
+    // 牆：每層樓一排窗（遠到分不出來時換成平均的明度），牆腳被庭木與鄰屋擋著，暗一點
+    float pw = max(fwidth(vUv.x), fwidth(vUv.y));
+    float fl = fract(vUv.y / 2.9), bay = fract(vUv.x / 2.4 + 0.5);
+    float win = step(0.36, fl) * step(fl, 0.76) * step(0.24, bay) * step(bay, 0.78) * step(0.0, vUv.y) * step(vUv.y, vTop - 0.2);
+    float nearK = rs(1.5, 0.5, pw);
+    alb = vWall * mix(0.84, 1.0 - 0.85 * win, nearK);
+    alb *= (0.6 + 0.4 * rs(-0.5, 2.6, vUv.y)) * (0.72 + 0.28 * rs(vTop - 0.1, vTop - 1.0, vUv.y)); // 簷下也暗
+  }
+  float sunT = max(dot(N, normalize(uSunDir)), 0.0) * cloudShade(vW, dist);
+  vec3 irr = uSunCol * uSunI * sunT + mix(uHemiGround, uHemiSky, N.y * 0.5 + 0.5) * uHemiI;
+  vec3 col = alb * irr / PI;
+  col += uNight * vec3(0.0035, 0.005, 0.009) * (0.4 + 0.6 * N.y);
+  // 夜晚被街燈照到的牆面與屋頂
+  col += uLit * (0.25 + alb) * 0.02 * vec3(1.0, 0.62, 0.3);
+  col = applyAir(col, vW, dist, 0.0);
+  gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
+// 一棟房子的單位形狀：x 是長邊（屋脊方向），y 的 0／1／2 分別是牆腳、簷口、屋脊；屋頂比牆多伸出一圈屋簷
+function houseGeometry() {
+  const pos = [], k = [];
+  const tri = (a, b, c, roof, axis) => {
+    const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const cx = (a[0] + b[0] + c[0]) / 3, cy = (a[1] + b[1] + c[1]) / 3 - 0.9, cz = (a[2] + b[2] + c[2]) / 3;
+    if (nx * cx + ny * cy + nz * cz < 0) [b, c] = [c, b]; // 正面一律朝外
+    for (const p of [a, b, c]) { pos.push(...p); k.push(roof, axis ? p[2] : p[0], axis); }
+  };
+  const quad = (a, b, c, d, roof, axis) => { tri(a, b, c, roof, axis); tri(a, c, d, roof, axis); };
+  for (const z of [-0.5, 0.5]) {
+    quad([-0.5, 0, z], [0.5, 0, z], [0.5, 1, z], [-0.5, 1, z], 0, 0);
+    quad([-0.56, 0.76, z * 1.24], [0.56, 0.76, z * 1.24], [0.56, 2, 0], [-0.56, 2, 0], 1, 0);
+  }
+  for (const x of [-0.5, 0.5]) {
+    quad([x, 0, -0.5], [x, 0, 0.5], [x, 1, 0.5], [x, 1, -0.5], 0, 1);
+    tri([x, 1, -0.5], [x, 1, 0.5], [x, 2, 0], 0, 1);
+  }
+  const g = new THREE.InstancedBufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aK', new THREE.Float32BufferAttribute(k, 3));
+  return g;
+}
+
+// 屋頂：燻瓦的深灰最多，其次銀灰、藍瓦、紅褐的鐵皮、焦茶；牆：白、米、淺灰、木板
+const ROOF_COLS = [[0.34, [0.15, 0.16, 0.18]], [0.2, [0.36, 0.37, 0.38]], [0.13, [0.13, 0.19, 0.29]], [0.13, [0.36, 0.17, 0.11]], [0.1, [0.13, 0.10, 0.09]], [0.05, [0.19, 0.29, 0.26]], [0.05, [0.58, 0.58, 0.56]]];
+const WALL_COLS = [[0.3, [0.68, 0.66, 0.61]], [0.2, [0.62, 0.55, 0.44]], [0.12, [0.50, 0.50, 0.49]], [0.26, [0.28, 0.20, 0.13]], [0.12, [0.52, 0.41, 0.30]]];
+const HOUSE_DENSITY = 1; // 聚落裡房子的密度（街的條數照比例增減）
+
+function buildHouses(hamlets) {
+  let seed = 7411;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pick = (list) => { let r = rand(); for (const [w, c] of list) { if ((r -= w) < 0) return c; } return list[0][1]; };
+  const aPos = [], aDim = [], aRoof = [], aWall = [];
+  // 不讓房子疊在一起：30 公尺的格子裡記下每棟的位置與半徑
+  const grid = new Map(), CELL = 30;
+  const put = (x, z, yaw, w, d, wh, rh, roof, wall) => {
+    const h = heightAt(x, z);
+    if (h < SEA + 1.6) return false;
+    if (Math.hypot(heightAt(x + 6, z) - h, heightAt(x, z + 6) - h) > 4.2) return false; // 太陡不蓋
+    const r = Math.max(w, d) * 0.5 + 0.8, gx = Math.floor(x / CELL), gz = Math.floor(z / CELL);
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      for (const [ox, oz, or] of grid.get(`${gx + i},${gz + j}`) || []) if (Math.hypot(x - ox, z - oz) < (r + or) * 0.82) return false;
+    }
+    const key = `${gx},${gz}`;
+    if (!grid.has(key)) grid.set(key, []);
+    grid.get(key).push([x, z, r]);
+    const sh = 0.85 + 0.3 * rand(); // 每棟的新舊、明暗
+    aPos.push(x, h, z, yaw); aDim.push(w, wh, d, rh);
+    aRoof.push(roof[0] * sh, roof[1] * sh, roof[2] * sh); aWall.push(wall[0] * sh, wall[1] * sh, wall[2] * sh);
+    return true;
+  };
+  const contour = (x, z) => {
+    const h = heightAt(x, z), gx = heightAt(x + 8, z) - h, gz = heightAt(x, z + 8) - h;
+    return Math.hypot(gx, gz) < 0.25 ? rand() * Math.PI : Math.atan2(gx, -gz);
+  };
+  // 一棟民家：平房或兩層，屋脊多半順著街
+  const house = (x, z, dir) => {
+    const w = 7 + rand() * 5, d = 6 + rand() * 2.4, two = rand() < 0.45, turn = rand() < 0.22;
+    return put(x, z, dir + (turn ? Math.PI / 2 : 0) + (rand() - 0.5) * 0.12, turn ? d : w, turn ? w : d, two ? 5.3 + rand() * 0.6 : 2.9 + rand() * 0.4, 2.1 + rand() * 1.3, pick(ROOF_COLS), pick(WALL_COLS));
+  };
+  // 一條街：兩側各一排
+  const row = (x, z, n, core) => {
+    const dir = contour(x, z), ca = Math.cos(dir), sa = Math.sin(dir);
+    let u = -n * 6.5;
+    for (let m = 0; m < n; m++) {
+      u += 11 + rand() * 5;
+      for (const side of [-1, 1]) {
+        if (rand() > 0.85) continue;
+        const off = side * (6.5 + rand() * 2), px = x + ca * u - sa * off, pz = z + sa * u + ca * off;
+        if (core && rand() < 0.045) { // 公寓、學校、公所：平屋頂、幾層樓
+          const g = 0.5 + rand() * 0.22;
+          put(px, pz, dir, 16 + rand() * 18, 10 + rand() * 5, 8.7 + Math.floor(rand() * 4) * 2.9, 0, [0.4, 0.4, 0.39], [g + 0.06, g + 0.05, g]);
+        } else house(px, pz, dir);
+      }
+    }
+  };
+
+  for (const [tx, tz, tr, td] of TOWNS) {
+    // 港邊的倉庫與漁協（大的聚落才有）：先往下坡找到海岸，沿岸排開
+    if (td >= 0.8) {
+      let cx = tx, cz = tz, ux = 0, uz = 0;
+      for (let i = 0; i < 60 && heightAt(cx, cz) > SEA + 5; i++) {
+        const h = heightAt(cx, cz), gx = heightAt(cx + 10, cz) - h, gz = heightAt(cx, cz + 10) - h, gl = Math.hypot(gx, gz) || 1;
+        ux = gx / gl; uz = gz / gl;
+        cx -= ux * 12; cz -= uz * 12;
+      }
+      const along = contour(cx, cz), ca = Math.cos(along), sa = Math.sin(along), nw = 4 + Math.floor(rand() * 4);
+      for (let m = 0; m < nw; m++) {
+        const u = (m - (nw - 1) / 2) * (50 + rand() * 14), in_ = 14 + rand() * 22;
+        put(cx + ca * u + ux * in_, cz + sa * u + uz * in_, along + (rand() - 0.5) * 0.1, 26 + rand() * 20, 13 + rand() * 6, 6 + rand() * 2.5, 2 + rand(),
+          pick([[0.4, [0.40, 0.47, 0.53]], [0.3, [0.42, 0.22, 0.14]], [0.3, [0.52, 0.53, 0.53]]]), [0.6, 0.6, 0.58]);
+      }
+    }
+    const n = Math.round(tr * tr * td / 1000 * HOUSE_DENSITY);
+    for (let k = 0, placed = 0; k < n * 10 && placed < n; k++) {
+      const a = rand() * Math.PI * 2, rr = tr * 1.02 * Math.pow(rand(), 0.7);
+      const x = tx + Math.cos(a) * rr, z = tz + Math.sin(a) * rr, up = heightAt(x, z) - SEA;
+      if (up < 2 || rand() > sstep(tr, tr * 0.35, rr) * Math.exp(-up / 60)) continue;
+      placed++;
+      row(x, z, 3 + Math.floor(rand() * 7), rr < tr * 0.5);
+    }
+  }
+  // 聚落以外：海岸的小聚落與獨棟人家、山腰的旅館與寺（位置與夜晚的燈一致）
+  for (const [x, z, n, kind] of hamlets) {
+    if (kind === 1) put(x, z, contour(x, z), 15 + rand() * 12, 9 + rand() * 4, 6 + rand() * 3, 2.4 + rand() * 1.2, pick(ROOF_COLS), pick(WALL_COLS));
+    else if (n === 1) house(x, z, contour(x, z));
+    else row(x, z, n, false);
+  }
+
+  const g = houseGeometry();
+  g.setAttribute('aPos', new THREE.InstancedBufferAttribute(new Float32Array(aPos), 4));
+  g.setAttribute('aDim', new THREE.InstancedBufferAttribute(new Float32Array(aDim), 4));
+  g.setAttribute('aRoof', new THREE.InstancedBufferAttribute(new Float32Array(aRoof), 3));
+  g.setAttribute('aWall', new THREE.InstancedBufferAttribute(new Float32Array(aWall), 3));
+  g.instanceCount = aPos.length / 4;
   return g;
 }
 
@@ -552,7 +752,12 @@ export function createVista(scene, { sun, hemi }) {
 
   let seed = 5150;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const lgeo = buildLights(radii, H, W, cos, sin, rand);
+  const { geo: lgeo, hamlets } = buildLights(radii, H, W, cos, sin, rand);
+
+  const hgeo = buildHouses(hamlets);
+  const houses = new THREE.Mesh(hgeo, new THREE.ShaderMaterial({ vertexShader: houseVert, fragmentShader: houseFrag, uniforms, fog: false }));
+  houses.frustumCulled = false;
+  scene.add(houses);
   const lu = { uLit: uniforms.uLit, uTime: G.uTime, uPx: { value: Math.min(devicePixelRatio, 2) } };
   const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false };
   const lightPts = new THREE.Points(lgeo, new THREE.ShaderMaterial({ uniforms: lu, vertexShader: lightVert, fragmentShader: lightFrag, ...add }));
@@ -561,7 +766,7 @@ export function createVista(scene, { sun, hemi }) {
   scene.add(lightPts, streaks);
 
   return {
-    terrain, uniforms, lights: lightPts, streaks, lightCount: lgeo.attributes.position.count,
+    terrain, uniforms, houses, houseCount: hgeo.instanceCount, lights: lightPts, streaks, lightCount: lgeo.attributes.position.count,
     heightAt,
     update() {
       uniforms.uSunCol.value.copy(sun.color);
