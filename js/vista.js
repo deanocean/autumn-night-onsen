@@ -1,5 +1,5 @@
 // 遠景：從溫泉的崖邊往北看下去的海灣。地形高度在 terrain.js；這裡把它蓋成網格、上色、點燈。
-// - 網格是以原點為中心的極座標格子：近處密、遠處疏，一路延伸到約 12 公里外。
+// - 網格是以原點為中心的極座標格子：近處密、遠處疏，一路延伸到 46 公里外（外海與海平線上的島）。
 // - 陸地、海面、聚落都在同一個 shader 裡：低於海面的頂點壓平成海面，片段依「原始高度」判斷是水是陸，
 //   海岸線因此沒有兩層網格交疊的閃爍。
 // - 陸地：遠看是一顆顆樹冠的明暗（Voronoi 格子當樹冠），紅、橙、黃與杉綠依區塊混色；越遠越模糊成平均色。
@@ -8,9 +8,8 @@
 import * as THREE from 'three';
 import { G } from './env.js';
 import { GLSL_NOISE } from './shaders.js';
-import { SEA, heightAt, TOWNS, PLATEAU } from './terrain.js';
+import { SEA, heightAt, TOWNS, PLATEAU, R_MAX } from './terrain.js';
 
-const R_MAX = 12400;
 const NA = 720; // 一圈的格數
 const EYE_Y = 1.85;
 
@@ -18,7 +17,7 @@ function ringRadii() {
   const r = [0];
   let x = 2;
   while (x < 44) { r.push(x); x += 1.2; }
-  while (x < R_MAX) { r.push(x); x *= 1.021; }
+  while (x < R_MAX) { r.push(x); x *= x < 9000 ? 1.021 : 1.016; } // 遠山的稜線取樣密一點，剪影才不會缺角
   r.push(R_MAX);
   return r;
 }
@@ -35,7 +34,7 @@ void main(){
 
 const frag = /* glsl */ `
 uniform vec3 uSunDir, uSunCol, uHemiSky, uHemiGround, uHaze, uSkyTop, uSkyHorizon;
-uniform float uSunI, uHemiI, uNight, uTime, uLit;
+uniform float uSunI, uHemiI, uNight, uTime, uLit, uAir;
 uniform vec4 uTowns[${TOWNS.length}];
 varying vec3 vW; varying float vH; varying vec3 vN; varying float vRefl;
 ${GLSL_NOISE}
@@ -161,7 +160,7 @@ void main(){
   nL = normalize(mix(nL, N, floorM));
 
   // 聚落：灰白、藍灰、紅褐的屋頂與其間的庭木
-  float town = townMask(P.xz) * rs(0.7, 0.9, N.y) * rs(55.0, 15.0, h) * step(0.0, h);
+  float town = townMask(P.xz) * rs(0.6, 0.85, N.y) * rs(95.0, 30.0, h) * step(0.0, h);
   float townLit = 0.0;
   if (town > 0.01) {
     vec2 bq = P.xz / 9.0; vec2 bc = floor(bq), bf = fract(bq);
@@ -170,7 +169,7 @@ void main(){
     float k = fract(bh * 53.1);
     vec3 roof = k < 0.35 ? vec3(0.55, 0.56, 0.56) : k < 0.55 ? vec3(0.27, 0.31, 0.36) : k < 0.8 ? vec3(0.78, 0.77, 0.73) : vec3(0.42, 0.26, 0.19);
     vec3 ground = mix(vec3(0.13, 0.17, 0.09), vec3(0.34, 0.33, 0.31), 0.4);
-    vec3 tc = mix(mix(ground, roof, bld), mix(ground, vec3(0.50, 0.49, 0.47), dens * 0.6) * (0.6 + 0.8 * vnoise(vec3(P.xz / max(px * 2.5, 9.0), 4.4))), rs(0.3, 1.2, px / 9.0));
+    vec3 tc = mix(mix(ground, roof, bld), mix(ground, vec3(0.42, 0.41, 0.40), dens * 0.5) * (0.6 + 0.8 * vnoise(vec3(P.xz / max(px * 2.5, 9.0), 4.4))), rs(0.3, 1.2, px / 9.0));
     alb = mix(alb, tc, town);
     nL = normalize(mix(nL, N, town));
     townLit = town * dens;
@@ -179,14 +178,20 @@ void main(){
   float shore = rs(3.0 + px * 0.8, 0.0, hc) * (1.0 - water);
   alb = mix(alb, vec3(0.50, 0.48, 0.44), shore * 0.85);
 
-  float sunT = max(dot(nL, L), 0.0);
+  // 雲影：幾公里大的明暗緩緩移動，山與海才有光影的層次（太陽在觀看者背後，少了它整片是平光）
+  float cs = fbm(vec3(P.xz / 2600.0 + vec2(uTime * 0.004, 0.0), 12.0));
+  float shade = mix(1.0, 0.42 + 0.58 * rs(0.38, 0.6, cs), rs(250.0, 1200.0, dist));
+  float sunT = max(dot(nL, L), 0.0) * shade;
   vec3 irr = uSunCol * uSunI * sunT + mix(uHemiGround, uHemiSky, nL.y * 0.5 + 0.5) * uHemiI;
+  // 聚落的燈火把附近的地面、山腳與海面染上一片暖色
+  float glow = 0.0;
+  for (int i = 0; i < ${TOWNS.length}; i++) { vec4 tw = uTowns[i]; vec2 dq = (P.xz - tw.xy) / (tw.z * 1.5); glow += tw.w * exp(-dot(dq, dq)); }
   vec3 land = alb * irr / PI;
   // 夜晚：星光。面向天空的坡帶一點藍灰，陡的稜線邊緣再亮一點點，山才不是一片死黑
   float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 6.0) * rs(0.85, 0.5, N.y);
   land += uNight * (vec3(0.0035, 0.005, 0.009) * (0.4 + 0.6 * N.y) + vec3(0.006, 0.009, 0.016) * rim);
   // 夜晚聚落地面被燈照亮的暖色
-  land += uLit * townLit * vec3(1.0, 0.62, 0.3) * 0.02;
+  land += uLit * (townLit * 0.035 + glow * 0.006 * rs(140.0, 20.0, h)) * vec3(1.0, 0.62, 0.3);
 
   // ---------- 海面 ----------
   // 波紋：遠處的格子比像素還小就淡掉，免得閃爍
@@ -196,8 +201,12 @@ void main(){
   // 風吹過的區塊：海面有亮有暗的大片紋理
   float streak = fbm2(vec3(P.x / 900.0, P.z / 260.0, 2.0));
   vec3 R = reflect(-V, wn);
-  vec3 sky = skyAt(vec3(R.x, abs(R.y), R.z));
+  // 遠處的海面看不出個別的波，但波的斜面讓它映到的是較高處的天空、反射率也到不了 1：
+  // 所以海平線附近的海比天空深，不會跟天空糊成一片白
+  float farK = rs(600.0, 6000.0, dist);
+  vec3 sky = skyAt(vec3(R.x, abs(R.y) + 0.16 * farK, R.z));
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(wn, V), 0.0), 5.0);
+  fres = min(fres, mix(1.0, 0.62, farK));
   fres *= 0.8 + 0.35 * streak;
   vec3 body = uHemiSky * uHemiI * vec3(0.03, 0.09, 0.14);
   // 對岸的山的倒影：暗、帶一點林色
@@ -205,21 +214,23 @@ void main(){
   vec3 refl = mix(sky, hillRefl, clamp(vRefl, 0.0, 1.0) * 0.9);
   vec3 sea = mix(body, refl, clamp(fres, 0.0, 1.0));
   // 夜晚的海映著星空，比陸地亮一點
-  sea += uNight * vec3(0.008, 0.015, 0.03) * (0.5 + fres) * (1.0 - vRefl * 0.8);
+  sea += uNight * vec3(0.011, 0.021, 0.044) * (0.5 + fres) * (1.0 - vRefl * 0.8);
   // 聚落的燈火映在附近海面上的一片暖色
-  float glow = 0.0;
-  for (int i = 0; i < ${TOWNS.length}; i++) { vec4 tw = uTowns[i]; vec2 dq = (P.xz - tw.xy) / (tw.z * 1.7); glow += tw.w * exp(-dot(dq, dq)); }
-  sea += uLit * glow * vec3(1.0, 0.6, 0.3) * 0.012 * (0.4 + fres);
+  sea += uLit * glow * vec3(1.0, 0.6, 0.3) * 0.02 * (0.4 + fres);
+  sea *= mix(1.0, 0.72 + 0.28 * shade, 1.0 - uNight);
   float sg = pow(max(dot(R, L), 0.0), 300.0) * uSunI * (1.0 - uNight);
   sea += uSunCol * sg * 2.0;
 
   vec3 col = mix(land, sea, water);
 
-  // ---------- 空氣遠近：越遠越淡、越藍；低處（海面附近）的靄比較濃 ----------
-  float dens = (1.0 / 23000.0) * (1.0 + 0.8 * exp(-max(P.y - SEA, 0.0) / 80.0));
+  // ---------- 空氣遠近：一層比一層淡、一層比一層藍，是遠景層次的主要來源；低處（海面附近）的靄比較濃 ----------
+  float dens = (1.0 / uAir) * (1.0 + 0.35 * exp(-max(P.y - SEA, 0.0) / 90.0));
   float hz = 1.0 - exp(-dist * dens);
-  hz = max(hz, rs(8500.0, 11800.0, dist));
-  vec3 hcol = mix(mix(uHaze, uSkyTop, 0.32 * (1.0 - uNight)), uSkyHorizon, rs(3000.0, 10000.0, dist));
+  // 中距離的靄偏藍（天空的散射光），越遠越接近地平線的顏色；海平線留一線比天空深一點的藍
+  vec3 hcol = mix(mix(uHaze, uSkyTop, 0.5 * (1.0 - uNight)), uSkyHorizon, 0.6 * rs(6000.0, 36000.0, dist));
+  // 海面不會褪成天空的顏色：遠處仍是比天空深的藍，海平線才看得出來
+  hcol = mix(hcol, mix(uHaze, uSkyTop, 0.62) * mix(0.9, 1.0, uNight), water);
+  hz = min(hz, mix(0.97, 0.9, water));
   col = mix(col, hcol, hz);
 
   gl_FragColor = vec4(col, 1.0);
@@ -253,31 +264,34 @@ export function slopeTreeSpots() {
 
 
 // ---------- 夜景燈火 ----------
-// aFx：亮度、相位、是否在海面拉出倒影、種類（0 常亮、1 航空障礙燈慢閃、2 燈塔的閃光）
+// aFx：亮度、相位、是否在海面拉出倒影、種類（0 常亮、1 航空障礙燈慢閃、2 燈塔的閃光、3 聚落上空的光暈）
 const lightVert = /* glsl */ `
 attribute vec3 aCol; attribute vec4 aFx;
 uniform float uLit, uPx, uTime;
-varying vec3 vC; varying float vA;
+varying vec3 vC; varying float vA; varying float vK;
 void main(){
   vec4 mv = viewMatrix * vec4(position, 1.0);
   float d = -mv.z;
+  vK = aFx.w;
   // 遠處的燈因空氣擾動微微閃爍
   float tw = 0.8 + 0.2 * sin(uTime * (1.5 + aFx.y * 5.0) + aFx.y * 40.0);
   if (aFx.w > 1.5) tw = 0.12 + 2.2 * pow(max(sin(uTime * 0.9 + aFx.y * 6.283), 0.0), 24.0);
   else if (aFx.w > 0.5) tw = 0.15 + 0.85 * smoothstep(0.35, 0.5, abs(fract(uTime * 0.45 + aFx.y) - 0.5) * 2.0);
-  vA = aFx.x * uLit * tw * exp(-d / 9000.0);
+  vA = aFx.x * uLit * tw * exp(-d / 16000.0);
   vC = aCol;
   gl_Position = projectionMatrix * mv;
-  gl_PointSize = uPx * (2.0 + 3.2 * aFx.x) * clamp(1500.0 / d, 0.62, 2.0);
+  gl_PointSize = uPx * (2.6 + 3.6 * aFx.x) * clamp(1500.0 / d, 0.66, 2.0);
+  // 種類 3：聚落上空的光暈（aFx.x 是半徑，公尺），不閃
+  if (aFx.w > 2.5) { vA = uLit * 0.036 * exp(-d / 16000.0) * smoothstep(900.0, 2600.0, d); gl_PointSize = uPx * clamp(aFx.x * 640.0 / d, 6.0, 200.0); }
 }`;
 const lightFrag = /* glsl */ `
-varying vec3 vC; varying float vA;
+varying vec3 vC; varying float vA; varying float vK;
 void main(){
   vec2 p = gl_PointCoord * 2.0 - 1.0;
   float r = dot(p, p);
   if (r > 1.0) discard;
-  float a = (exp(-r * 9.0) + exp(-r * 2.5) * 0.16) * vA;
-  gl_FragColor = vec4(vC * a * 2.2, 1.0);
+  float a = (vK > 2.5 ? exp(-r * 3.5) - 0.03 : exp(-r * 9.0) + exp(-r * 2.5) * 0.22) * vA;
+  gl_FragColor = vec4(vC * max(a, 0.0) * 2.4, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -294,8 +308,8 @@ void main(){
   w.y = ${SEA.toFixed(1)};
   vec4 mv = viewMatrix * vec4(w, 1.0);
   float d = -mv.z;
-  float tw = aFx.w > 1.5 ? 0.12 + 2.2 * pow(max(sin(uTime * 0.9 + aFx.y * 6.283), 0.0), 24.0) : 1.0;
-  vA = aFx.z * aFx.x * uLit * tw * exp(-d / 8000.0);
+  float tw = aFx.w > 1.5 && aFx.w < 2.5 ? 0.12 + 2.2 * pow(max(sin(uTime * 0.9 + aFx.y * 6.283), 0.0), 24.0) : 1.0;
+  vA = aFx.z * aFx.x * uLit * tw * exp(-d / 14000.0);
   vC = aCol; vPh = aFx.y;
   gl_Position = projectionMatrix * mv;
   // 深度往前挪 4%：幾公里外的深度精度只有十公尺上下，貼著海面的點會被海面自己吃掉
@@ -315,11 +329,13 @@ void main(){
   float prof = exp(-y * y / (y < 0.0 ? 0.008 : 0.09));
   float dash = 0.5 + 0.5 * sin(uv.y * vSize * 0.5 / uPx + uTime * 2.2 + vPh * 30.0);
   float a = line * prof * dash * vA;
-  gl_FragColor = vec4(vC * a * 1.15, 1.0);
+  gl_FragColor = vec4(vC * a * 1.5, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
 
+// 夜景的燈量：1 是 2026-11-13 第二輪的量（使用者嫌少），整體照比例增減
+const LIGHT_DENSITY = 2.8;
 const LCOL = {
   warm: [1.0, 0.8, 0.52], sodium: [1.0, 0.56, 0.2], white: [0.92, 0.93, 0.95], cool: [0.75, 0.86, 1.0], red: [1.0, 0.12, 0.08], green: [0.4, 1.0, 0.6],
 };
@@ -340,7 +356,7 @@ function buildLights(radii, H, W, cos, sin, rand) {
     add(x, h + lift + rand() * 3, z, c, i, refl);
     return true;
   };
-  const dim = () => 0.13 + 0.5 * rand() ** 3; // 多數的燈很暗，少數較亮
+  const dim = () => 0.2 + 0.6 * rand() ** 2.5; // 多數的燈偏暗，少數較亮
   // 沿等高線的方向（坡太平就隨便）
   const contour = (x, z) => {
     const h = heightAt(x, z), gx = heightAt(x + 8, z) - h, gz = heightAt(x, z + 8) - h;
@@ -375,16 +391,21 @@ function buildLights(radii, H, W, cos, sin, rand) {
     }
   };
 
-  // 1) 聚落：中心密、往外與往山上漸疏
+  // 1) 聚落：中心密、往外與往山上漸疏（燈量看 LIGHT_DENSITY）
   for (const [tx, tz, tr, td] of TOWNS) {
-    const n = Math.round(tr * tr * td / 4300);
+    const n = Math.round(tr * tr * td / 4300 * LIGHT_DENSITY);
     for (let k = 0, placed = 0; k < n * 6 && placed < n; k++) {
-      const a = rand() * Math.PI * 2, rr = tr * 1.45 * Math.pow(rand(), 0.7);
+      const a = rand() * Math.PI * 2, rr = tr * 1.5 * Math.pow(rand(), 0.75);
       const x = tx + Math.cos(a) * rr, z = tz + Math.sin(a) * rr;
       const up = heightAt(x, z) - SEA;
-      if (up < 1.5 || rand() > Math.exp(-up / 42)) continue;
+      if (up < 1.5 || rand() > Math.exp(-up / 65)) continue;
       placed++;
-      street(x, z, 3 + Math.floor(rand() * 6), 20 + rand() * 22);
+      street(x, z, 3 + Math.floor(rand() * 6), 18 + rand() * 20);
+    }
+    // 聚落上空的光暈
+    for (let m = 0; m < 3; m++) {
+      const x = tx + (rand() - 0.5) * tr * 0.9, z = tz + (rand() - 0.5) * tr * 0.9;
+      pos.push(x, Math.max(heightAt(x, z), SEA) + 20, z); col.push(1.0, 0.62, 0.3); fx.push(tr * (0.5 + 0.3 * td), rand(), 0, 3);
     }
     // 從聚落出發的道路：先往下找到海岸，沿岸往兩邊各一條；再往山上兩條
     let cx = tx, cz = tz;
@@ -393,10 +414,18 @@ function buildLights(radii, H, W, cos, sin, rand) {
       cx -= (gx / gl) * 12; cz -= (gz / gl) * 12;
     }
     const along = contour(cx, cz);
-    for (const sgn of [0, Math.PI]) road(cx, cz, along + sgn, tr * (2.2 + rand() * 2.2), () => 5, LCOL.sodium, 34 + rand() * 12, 0.34);
-    for (let i = 0; i < 2; i++) {
-      const top = 45 + rand() * 75, len = tr * (1.6 + rand() * 1.4);
-      road(tx, tz, rand() * Math.PI * 2, len, (s) => 8 + (top - 8) * Math.min(1, s / (len * 0.8)), rand() < 0.5 ? LCOL.sodium : LCOL.warm, 42 + rand() * 20, 0.26);
+    for (const sgn of [0, Math.PI]) road(cx, cz, along + sgn, tr * (4 + rand() * 4), () => 5, LCOL.sodium, 28 + rand() * 10, 0.42);
+    for (let i = 0; i < 3; i++) {
+      const top = 45 + rand() * 90, len = tr * (1.8 + rand() * 1.6);
+      road(tx, tz, rand() * Math.PI * 2, len, (s) => 8 + (top - 8) * Math.min(1, s / (len * 0.8)), rand() < 0.5 ? LCOL.sodium : LCOL.warm, 36 + rand() * 18, 0.32);
+    }
+    // 港：岸壁上一整排明亮的鈉燈（大的聚落才有），在海面拉出長長的倒影
+    if (td >= 0.8) {
+      const nq = 10 + Math.floor(rand() * 10), ca = Math.cos(along), sa = Math.sin(along);
+      for (let m = 0; m < nq; m++) {
+        const u = (m - nq / 2) * 16;
+        add(cx + ca * u, SEA + 9, cz + sa * u, m % 5 === 2 ? LCOL.white : LCOL.sodium, 0.62 + rand() * 0.3, true);
+      }
     }
   }
   // 2) 海岸邊零星的小聚落與獨棟人家：沿網格的放射線找出跨過海岸的位置
@@ -405,20 +434,20 @@ function buildLights(radii, H, W, cos, sin, rand) {
     const h0 = H[i * W + j], h1 = H[(i + 1) * W + j], c = SEA + 3;
     if ((h0 - c) * (h1 - c) > 0) continue;
     const r = radii[i] + (radii[i + 1] - radii[i]) * ((c - h0) / (h1 - h0)) + (h1 > h0 ? 12 : -12);
-    if (r < 9500) coast.push([cos[j] * r, sin[j] * r]);
+    if (r < 26000) coast.push([cos[j] * r, sin[j] * r]);
   }
   for (const [x, z] of coast) {
     const k = rand();
-    if (k < 0.035) {
-      const n = 1 + Math.floor(rand() * 3);
-      for (let m = 0; m < n; m++) street(x + (rand() - 0.5) * 90, z + (rand() - 0.5) * 90, 2 + Math.floor(rand() * 4), 18 + rand() * 16);
-      if (rand() < 0.5) road(x, z, contour(x, z) + (rand() < 0.5 ? Math.PI : 0), 250 + rand() * 500, () => 5, LCOL.sodium, 38, 0.3);
-    } else if (k < 0.085) land(x, z, pickCol(rand()), dim());
+    if (k < 0.07) {
+      const n = 1 + Math.floor(rand() * 4);
+      for (let m = 0; m < n; m++) street(x + (rand() - 0.5) * 110, z + (rand() - 0.5) * 110, 2 + Math.floor(rand() * 5), 18 + rand() * 16);
+      if (rand() < 0.6) road(x, z, contour(x, z) + (rand() < 0.5 ? Math.PI : 0), 300 + rand() * 700, () => 5, LCOL.sodium, 34, 0.36);
+    } else if (k < 0.2) land(x, z, pickCol(rand()), dim());
   }
   // 3) 山腰上零星的燈（旅館、寺、展望所）
-  for (let k = 0, n = 0; k < 4000 && n < 26; k++) {
-    const x = (rand() - 0.5) * 12000, z = -300 - rand() * 6500, up = heightAt(x, z) - SEA;
-    if (up < 40 || up > 260) continue;
+  for (let k = 0, n = 0; k < 8000 && n < 70; k++) {
+    const x = (rand() - 0.5) * 16000, z = -300 - rand() * 10000, up = heightAt(x, z) - SEA;
+    if (up < 40 || up > 320) continue;
     n++;
     street(x, z, 1 + Math.floor(rand() * 3), 16);
   }
@@ -428,19 +457,23 @@ function buildLights(radii, H, W, cos, sin, rand) {
     add(x, SEA + 5, z, LCOL.white, 0.6, true);
     add(x + 7, SEA + 3, z + 2, rand() < 0.5 ? LCOL.green : LCOL.red, 0.3, true);
   }
-  // 5) 外海的漁火：一群一群很亮的白光
-  for (const [gx, gz, n] of [[-500, -7800, 4], [900, -8900, 5], [300, -6700, 3], [-1400, -9600, 4]]) {
+  // 5) 漁火：水道裡幾群，外海的海平線上一整排（集魚燈，又白又亮）
+  for (const [gx, gz, n] of [[-500, -7800, 4], [-900, -9300, 4], [-300, -6500, 3], [-1300, -11500, 5]]) {
     for (let m = 0; m < n; m++) {
-      const x = gx + (rand() - 0.5) * 1700, z = gz + (rand() - 0.5) * 900;
+      const x = gx + (rand() - 0.5) * 1500, z = gz + (rand() - 0.5) * 900;
       if (heightAt(x, z) < SEA - 2) add(x, SEA + 8, z, LCOL.cool, 0.75 + rand() * 0.4, true);
     }
   }
+  for (let m = 0; m < 70; m++) {
+    const az = (rand() - 0.5) * 2.4, r = 14000 + rand() * 27000, x = Math.sin(az) * r, z = -Math.cos(az) * r;
+    if (heightAt(x, z) < SEA - 2) add(x, SEA + 10, z, LCOL.cool, 1.1 + rand() * 0.5, true);
+  }
   // 6) 燈塔（小島的頂上、岬角）與遠方山頂的航空障礙燈
-  for (const [x, z] of [[540, -2180], [-850, -1780], [1250, -5200]]) {
+  for (const [x, z] of [[540, -2180], [-1250, -2560], [700, -5300], [-700, -7300], [-1500, -13500]]) {
     const h = heightAt(x, z);
     if (h > SEA) add(x, h + 12, z, LCOL.white, 1.3, true, 2);
   }
-  for (const [x, z] of [[-2900, -900], [3100, -3500], [-5000, -3500], [2800, -600]]) add(x, heightAt(x, z) + 30, z, LCOL.red, 0.7, false, 1);
+  for (const [x, z] of [[-3500, -1800], [3500, -1150], [-5300, -4600], [5600, -3800], [4700, -7500], [-6400, -8500]]) add(x, heightAt(x, z) + 30, z, LCOL.red, 0.7, false, 1);
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -507,6 +540,7 @@ export function createVista(scene, { sun, hemi }) {
     uHemiSky: { value: new THREE.Color() }, uHemiGround: { value: new THREE.Color() }, uHemiI: { value: 1 },
     uHaze: { value: scene.fog.color },
     uLit: { value: 0 },
+    uAir: { value: 20000 }, // 空氣遠近的特徵距離（公尺）：越小越朦朧
     uTowns: { value: TOWNS.map(([x, z, r, d]) => new THREE.Vector4(x, z, r, d)) },
   };
   const mat = new THREE.ShaderMaterial({ vertexShader: vert, fragmentShader: frag, uniforms, fog: false });

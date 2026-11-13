@@ -54,7 +54,7 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.03;
 scene.add(sun);
 
-const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 15000);
+const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 70000);
 
 const { world, lamps } = buildWorld(scene);
 const props = createProps(world);

@@ -61,6 +61,24 @@ void main(){
     cl = rs(0.5, 0.78, cl) * rs(0.0, 0.25, d.y);
     c = mix(c, mix(uHorizon, vec3(1.0), 0.75) * (0.8 + 0.4 * uSunDisc), cl * 0.55 * uCloud);
   }
+  // 海平線上的一排積雲：有高有低、底部平、頂部一團團，天空在最遠的山後面才不會是空的
+  if (d.y > -0.01) {
+    float az = atan(d.x, -d.z), e = d.y;
+    float top = 0.028 + 0.12 * rs(0.3, 0.75, fbm2(vec3(az * 1.9, 0.0, 4.0))) + 0.035 * fbm2(vec3(az * 7.0, 1.0, 2.0));
+    float puff = fbm(vec3(az * 11.0 + uTime * 0.0015, e * 46.0, 6.0));
+    float cb = rs(top, top * 0.3, e + (0.5 - puff) * 0.07) * rs(-0.004, 0.012, e);
+    // 底部是藍灰的陰影、頂部受光；夜裡只是比天空略亮的一抹
+    vec3 lit = mix(mix(uHorizon, uTop, 0.5) * 0.9, mix(uHorizon, vec3(1.0), 0.85) * (0.8 + 0.4 * uSunDisc), rs(0.1, 0.9, (e + (puff - 0.5) * 0.06) / top));
+    lit = mix(lit, uSunCol, 0.25 * (1.0 - uSunDisc) * (1.0 - uNight));
+    lit = mix(lit, uHorizon * 1.5 + vec3(0.004, 0.006, 0.01), uNight);
+    c = mix(c, lit, cb * mix(0.9, 0.7, uNight));
+  }
+  // 夜晚：山後面遠方城市映在低空的微光
+  if (uNight > 0.01) {
+    float az = atan(d.x, -d.z);
+    float lobe = exp(-(az - 0.62) * (az - 0.62) / 0.10) + 0.7 * exp(-(az + 0.95) * (az + 0.95) / 0.16) + 0.25;
+    c += vec3(1.0, 0.6, 0.32) * 0.05 * lobe * exp(-max(d.y, 0.0) * 13.0) * uNight;
+  }
   // 夜空
   if (uNight > 0.01) {
     float ext = rs(-0.02, 0.22, d.y); // 接近地平線的星光被大氣削弱
@@ -111,7 +129,7 @@ export function createSky(scene) {
     uSunDisc: { value: 1 }, uCloud: { value: 1 },
   };
   const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(14000, 48, 24), // 比遠景的地形（約 12 公里）還大，星星才會被山擋住
+    new THREE.SphereGeometry(60000, 48, 24), // 比遠景的地形（46 公里）還大，星星才會被山擋住
     new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false, uniforms,
       vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -136,7 +154,7 @@ export function createSky(scene) {
       d.normalize();
     }
     if (d.y < -0.05) { i--; continue; }
-    t.copy(d).multiplyScalar(13500);
+    t.copy(d).multiplyScalar(58000);
     pos.push(t.x, t.y, t.z);
     // 亮度分布：暗星多、亮星少；顏色由偏藍到偏橙
     const mag = Math.pow(rand(), 4.2);
