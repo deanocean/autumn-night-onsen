@@ -73,6 +73,9 @@ vec3 broadCol(float h){
 }
 vec3 conCol(float h){ return mix(vec3(0.035, 0.085, 0.045), vec3(0.08, 0.14, 0.07), h); }
 const vec3 CON_AVG = vec3(0.055, 0.11, 0.058);
+// 水邊：岩岸的高度（公尺）與顏色、淺水的深度（公尺）與顏色
+const float SHORE_H = 1.6, SHALLOW_D = 5.0;
+const vec3 SHORE_COL = vec3(0.27, 0.25, 0.21), SHALLOW_COL = vec3(0.05, 0.135, 0.15);
 
 float townMask(vec2 p){
   float m = 0.0;
@@ -185,16 +188,16 @@ void main(){
   if (town > 0.01) {
     float dens = town * (0.35 + 0.55 * fbm2(vec3(P.xz / 70.0, 9.0)));
     float gk = fbm2(vec3(P.xz / max(px * 2.0, 14.0), 4.4));
-    vec3 paved = mix(vec3(0.17, 0.17, 0.165), vec3(0.29, 0.28, 0.25), gk);
+    vec3 paved = mix(vec3(0.17, 0.165, 0.15), vec3(0.275, 0.26, 0.225), gk);
     vec3 green = mix(alb, vec3(0.15, 0.19, 0.075), 0.5);
     vec3 tc = mix(green, paved, rs(0.3, 0.55, fbm2(vec3(P.xz / 26.0, 6.1))) * (0.45 + 0.55 * dens));
     alb = mix(alb, tc, town * 0.9);
     nL = normalize(mix(nL, N, town));
     townLit = town * dens;
   }
-  // 海岸：一圈淺色的岩石與護岸
-  float shore = rs(3.0 + px * 0.8, 0.0, hc) * (1.0 - water);
-  alb = mix(alb, vec3(0.50, 0.48, 0.44), shore * 0.85);
+  // 海岸：水邊一小圈濕的岩石與護岸。顏色只比山坡亮一點、遠處再淡掉，遠看才不會是一條白線
+  float shore = rs(SHORE_H + px * 0.22, 0.0, hc) * (1.0 - water);
+  alb = mix(alb, SHORE_COL * (0.8 + 0.4 * fbm2(vec3(P.xz / 7.0, 5.0))), shore * mix(0.7, 0.3, rs(4.0, 40.0, px)));
 
   // 雲影：幾公里大的明暗緩緩移動，山與海才有光影的層次（太陽在觀看者背後，少了它整片是平光）
   float shade = cloudShade(P, dist);
@@ -225,7 +228,11 @@ void main(){
   float fres = 0.02 + 0.98 * pow(1.0 - max(dot(wn, V), 0.0), 5.0);
   fres = min(fres, mix(1.0, 0.62, farK));
   fres *= 0.8 + 0.35 * streak;
-  vec3 body = uHemiSky * uHemiI * vec3(0.03, 0.09, 0.14);
+  // 岸邊的淺水：看得到一點水底，顏色從岸邊的淺青綠漸漸變回深水的藍；也比較不反光
+  float shallow = rs(SHALLOW_D + px * 0.7, 0.0, -hc);
+  shallow *= shallow * mix(1.0, 0.5, rs(4.0, 30.0, px));
+  vec3 body = uHemiSky * uHemiI * mix(vec3(0.03, 0.09, 0.14), SHALLOW_COL, shallow) + uSunCol * uSunI * SHALLOW_COL * 0.12 * shallow * shade;
+  fres *= 1.0 - 0.55 * shallow;
   // 對岸的山的倒影：暗、帶一點林色
   vec3 hillRefl = (avg * 0.75) * (uHemiSky * uHemiI * 0.35 + uSunCol * uSunI * 0.12) / PI;
   vec3 refl = mix(sky, hillRefl, clamp(vRefl, 0.0, 1.0) * 0.9);
@@ -590,6 +597,9 @@ function houseGeometry() {
 // 屋頂：燻瓦的深灰最多，其次銀灰、藍瓦、紅褐的鐵皮、焦茶；牆：白、米、淺灰、木板
 const ROOF_COLS = [[0.34, [0.15, 0.16, 0.18]], [0.2, [0.36, 0.37, 0.38]], [0.13, [0.13, 0.19, 0.29]], [0.13, [0.36, 0.17, 0.11]], [0.1, [0.13, 0.10, 0.09]], [0.05, [0.19, 0.29, 0.26]], [0.05, [0.58, 0.58, 0.56]]];
 const WALL_COLS = [[0.3, [0.68, 0.66, 0.61]], [0.2, [0.62, 0.55, 0.44]], [0.12, [0.50, 0.50, 0.49]], [0.26, [0.28, 0.20, 0.13]], [0.12, [0.52, 0.41, 0.30]]];
+// 配色往周圍山林的秋色靠一點（0 是原色）：使用者覺得聚落的顏色跟環境有點分離，但只要動一點點
+const TOWN_BLEND = 0.16, TOWN_TINT = [0.31, 0.25, 0.17];
+for (const [, c] of [...ROOF_COLS, ...WALL_COLS]) for (let i = 0; i < 3; i++) c[i] += (TOWN_TINT[i] - c[i]) * TOWN_BLEND;
 const HOUSE_DENSITY = 1; // 聚落裡房子的密度（街的條數照比例增減）
 
 function buildHouses(hamlets) {
@@ -709,6 +719,17 @@ export function createVista(scene, { sun, hemi }) {
       }
       refl[i * W + j] = best;
     }
+  }
+  // 岸上的頂點沿用隔壁海面頂點的值：否則內插到岸邊會變回 0，緊貼岸邊的一圈海面映的是天空，遠看就是一條亮線
+  const wet = refl.slice();
+  for (let i = 1; i < NR - 1; i++) for (let j = 0; j < NA; j++) {
+    if (H[i * W + j] < SEA) continue;
+    let m = 0;
+    for (const [di, dj] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+      const k = (i + di) * W + (j + dj + NA) % NA;
+      if (H[k] < SEA) m = Math.max(m, wet[k]);
+    }
+    refl[i * W + j] = m;
   }
   for (let i = 0; i < NR; i++) refl[i * W + NA] = refl[i * W];
 

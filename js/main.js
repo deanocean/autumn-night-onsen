@@ -61,7 +61,7 @@ const props = createProps(world);
 const trees = createTrees(scene, world, slopeTreeSpots());
 const water = createWater(scene);
 createSteam(scene);
-const sky = createSky(scene);
+const sky = createSky(scene, renderer);
 const vista = createVista(scene, { sun, hemi });
 const lights = createLights(scene, props.lanterns, lamps);
 const dayNight = createDayNight({ scene, renderer, sun, hemi, sky, lights });

@@ -1,6 +1,6 @@
 // 天空：白天的藍天、太陽與薄雲；夜晚的星空、銀河與流星。地形與遠山在 vista.js。
 // 天空是一顆包住整個場景的大球，顏色全部在 shader 裡依「視線方向」算出來。
-// 亮星另外用一顆顆點來畫（才能各自閃爍），銀河則是球面上的一條光帶。
+// 亮星另外用一顆顆點來畫（才能各自閃爍），銀河則是球面上的一條光帶（雲氣、塵埃暗帶、星雲與無數小星）。
 import * as THREE from 'three';
 import { GLSL_NOISE } from './shaders.js';
 import { G } from './env.js';
@@ -10,39 +10,98 @@ const MW_N = new THREE.Vector3(1.0, 0.35, 0.0).normalize();
 const MW_C = new THREE.Vector3(-0.157, 0.45, -0.88).normalize();
 const v3 = (v) => `vec3(${v.x.toFixed(4)}, ${v.y.toFixed(4)}, ${v.z.toFixed(4)})`;
 
+const MW_U = new THREE.Vector3().crossVectors(MW_N, MW_C).normalize();
+const MW_B = 0.5; // 貼圖涵蓋的範圍：離銀河中線 ±0.5（緯度的正弦）
+
+// 銀河的雲氣、塵埃與星雲不會動，啟動時畫成一張貼圖（rgb 是開根號後的亮度、a 是塵埃的濃度），
+// 天空的 shader 每個像素只取樣一次。直接在天空的 shader 裡算的話，十幾層雜訊會讓夜晚的畫格掉一半。
+const bakeFrag = /* glsl */ `
+varying vec2 vUv;
+${GLSL_NOISE}
+void main(){
+  // 銀河座標：b 是離銀河中線的距離（緯度）、u 是沿銀河的經度（0 在銀心；接縫在地平線下）
+  float u = (vUv.x * 2.0 - 1.0) * 3.14159265, b = (vUv.y * 2.0 - 1.0) * ${MW_B.toFixed(2)};
+  float cu = cos(u) * sqrt(1.0 - b * b);
+  vec3 d = ${v3(MW_C)} * cu + ${v3(MW_U)} * sin(u) * sqrt(1.0 - b * b) + ${v3(MW_N)} * b;
+  float coreG = pow(max(cu, 0.0), 7.0);
+  float bulge = exp(-(u * u / 0.09 + b * b / 0.022));
+  float sigma = 0.072 + 0.085 * coreG + 0.05 * (fbm2(vec3(u * 1.7, 1.0, 5.0)) - 0.37);
+  // 剖面是窄的一層疊寬的一層：中間亮，往外拖得很長，才不會像一條有邊界的帶子貼在天上
+  float wide = exp(-b * b / (2.0 * sigma * sigma * 6.5));
+  float band = 0.62 * exp(-b * b / (2.0 * sigma * sigma)) + 0.38 * wide;
+  float halo = exp(-b * b / (2.0 * 0.25 * 0.25));
+  vec3 col; float dust;
+  // 塵埃與雲氣共用一組被扭過的座標：雲才會捲、會分岔，而不是順著銀河拉成直線
+  vec3 p = vec3(u * 5.0, b * 7.5, 0.0);
+  vec2 w = vec2(fbm(p + vec3(0.0, 0.0, 3.1)), fbm(p + vec3(5.2, 1.3, 7.7))) - 0.47;
+  vec3 pw = p + vec3(w * 1.9, 0.0);
+  // 暗帶：沿中線蜿蜒的不規則塵埃雲，往銀心越厚；偶爾有幾縷伸到帶外
+  float n1 = fbm(pw + 11.0), n2 = fbm(pw * 3.3 + 23.0);
+  float mid = (fbm2(vec3(u * 1.4, 0.0, 3.0)) - 0.37) * 0.13 + 0.012;
+  float bw = 0.014 + 0.022 * coreG + 0.03 * fbm2(vec3(u * 2.6, 2.0, 7.0));
+  float lane = exp(-(b - mid) * (b - mid) / (2.0 * bw * bw)) * (0.5 + 0.5 * rs(0.25, 0.6, fbm2(vec3(u * 3.4, 6.0, 2.0))));
+  float dn = n1 * 0.68 + n2 * 0.32;
+  dust = rs(0.47, 0.70, dn + lane * 0.30 - 0.09) * rs(0.55, 0.12, abs(b)) * (0.55 + 0.45 * rs(-0.6, 0.6, cu));
+  // 細的塵埃絲：從暗帶分出去的一條條細紋
+  float vein = 1.0 - abs(2.0 * fbm(pw * 1.3 + 50.0) - 0.94);
+  dust = max(dust, rs(0.70, 1.0, vein) * 0.38 * (0.3 + 0.7 * n2 * 2.0) * rs(0.20, 0.04, abs(b - mid)) * rs(-0.2, 0.7, cu));
+  // 雲氣：一團團亮的恆星雲
+  float t1 = fbm(pw * 1.5 + 31.0), t2 = fbm(d * 19.0 + 3.0);
+  float cloud = (0.08 + 1.6 * t1) * (0.4 + 1.2 * t2);
+  float dens = band * (0.40 + 0.55 * coreG + 0.5 * bulge) * cloud;
+  // 核心偏暖（奶油黃），外側偏藍；最亮的地方接近白
+  vec3 tint = mix(vec3(0.40, 0.56, 1.0), vec3(1.0, 0.75, 0.47), rs(0.02, 0.75, coreG + bulge * 0.4));
+  tint = mix(tint, vec3(1.0, 0.95, 0.9), rs(0.7, 1.8, dens) * 0.3);
+  // 外圍的顏色往夜空的深藍靠，跟周圍的天空接起來
+  tint = mix(vec3(0.30, 0.44, 0.95), tint, rs(0.15, 0.85, band));
+  col = tint * dens * 0.235;
+  // 帶外一圈很淡的藍紫色
+  col += vec3(0.24, 0.34, 0.80) * exp(-b * b / (2.0 * 0.16 * 0.16)) * (0.034 + 0.06 * t1) * (0.6 + 0.4 * t2);
+  // 塵埃吸掉星光，藍的吸得比紅的多：雲的邊緣帶褐色
+  col *= exp(-dust * vec3(1.9, 2.3, 2.75));
+  // 粉紅色的發光星雲：中線附近幾小團，加一大片很淡的紫紅
+  float nb = fbm(vec3(u * 8.0, b * 9.0, 41.0) + vec3(w * 0.8, 0.0));
+  float neb = rs(0.56, 0.74, nb) * exp(-(b - mid) * (b - mid) / 0.008) * (1.0 - dust * 0.6);
+  col += vec3(1.0, 0.30, 0.46) * neb * 0.22 * (0.4 + coreG);
+  col += vec3(0.75, 0.30, 0.62) * band * rs(0.38, 0.62, fbm2(vec3(u * 2.3, b * 3.0, 17.0))) * 0.06 * (0.4 + coreG);
+  float edge = rs(${MW_B.toFixed(2)}, ${(MW_B * 0.5).toFixed(2)}, abs(b)); // 貼圖邊界前淡出到 0
+  gl_FragColor = vec4(sqrt(clamp(col * 0.5, 0.0, 1.0)) * edge, dust * edge);
+}`;
+
 const skyFrag = /* glsl */ `
 uniform vec3 uTop, uHorizon, uSunDir, uSunCol;
 uniform float uNight, uTime, uSunDisc, uStarBoost, uCloud;
+uniform sampler2D uMW;
 varying vec3 vDir;
 ${GLSL_NOISE}
 
-const vec3 MW_U = ${v3(new THREE.Vector3().crossVectors(MW_N, MW_C).normalize())};
+// 小星的顏色：藍白最多，其次白、淡黃，少數橙
+vec3 starTint(float t){
+  return t < 0.5 ? mix(vec3(0.62, 0.76, 1.0), vec3(0.92, 0.95, 1.0), t * 2.0) : mix(vec3(1.0, 0.95, 0.82), vec3(1.0, 0.72, 0.46), rs(0.5, 1.0, t) * rs(0.5, 1.0, t));
+}
 vec3 milkyWay(vec3 d){
   float b = dot(d, ${v3(MW_N)});
-  float core = max(dot(d, ${v3(MW_C)}), 0.0);
-  float coreG = pow(core, 7.0);
-  float sigma = 0.07 + 0.085 * coreG;
-  float band = exp(-b * b / (2.0 * sigma * sigma));
-  float halo = exp(-b * b / (2.0 * 0.24 * 0.24));
-  // 以「沿銀河方向 u、垂直銀河方向 b」當座標取雜訊，雲氣才會順著銀河拉長，而不是一團一團
-  float u = atan(dot(d, MW_U), dot(d, ${v3(MW_C)}));
-  float t1 = fbm(vec3(u * 4.5, b * 10.0, 1.0)), t2 = fbm(d * 17.0 + 3.0);
-  float cloud = (0.3 + 1.0 * t1) * (0.45 + 1.0 * t2);
-  // 暗帶：一條沿中線蜿蜒的塵埃，遮住後方星光
-  float off = (fbm2(vec3(u * 1.6, 0.0, 3.0)) - 0.37) * 0.11;
-  float lw = 0.018 + 0.03 * fbm2(vec3(u * 3.0, 2.0, 7.0));
-  float lane = rs(0.3, 0.55, fbm(vec3(u * 4.0, b * 14.0, 9.0))) * exp(-(b - off) * (b - off) / (2.0 * lw * lw));
-  float dens = band * (0.55 + 1.0 * coreG) * cloud * (1.0 - lane * 0.85) + halo * 0.035;
-  vec3 col = mix(vec3(0.52, 0.62, 0.98), vec3(1.0, 0.84, 0.66), rs(0.0, 0.8, coreG)) * dens * 0.42;
-  // 無數分不出個別的小星：在方向空間切格子，每格有機率出現一顆
-  for (int k = 0; k < 2; k++) {
-    float sc = k == 0 ? 190.0 : 320.0;
+  float cu = dot(d, ${v3(MW_C)});
+  float u = atan(dot(d, ${v3(MW_U)}), cu);
+  float coreG = pow(max(cu, 0.0), 7.0);
+  float sigma = 0.072 + 0.085 * coreG;
+  float band = 0.62 * exp(-b * b / (2.0 * sigma * sigma)) + 0.38 * exp(-b * b / (2.0 * sigma * sigma * 6.5));
+  float halo = exp(-b * b / (2.0 * 0.25 * 0.25));
+  // 雲氣、塵埃、星雲：取烘焙好的貼圖
+  vec4 mw = texture2D(uMW, vec2(u / 6.2831853 + 0.5, clamp(b / ${(MW_B * 2).toFixed(2)} + 0.5, 0.0, 1.0)));
+  vec3 col = mw.rgb * mw.rgb * 2.0;
+  float dust = mw.a;
+  for (int k = 0; k < 3; k++) {
+    float sc = k == 0 ? 150.0 : k == 1 ? 250.0 : 400.0;
     vec3 q = d * sc; vec3 cell = floor(q); vec3 f = fract(q) - 0.5;
     float h = hash1(cell + float(k) * 17.0);
-    float prob = 0.035 + band * (0.26 + 0.45 * coreG) * (1.0 - lane * 0.8);
-    float star = step(1.0 - prob, h) * rs(0.42, 0.0, length(f + (vec3(hash1(cell + 3.0), hash1(cell + 5.0), hash1(cell + 7.0)) - 0.5) * 0.5));
-    float tw = 0.75 + 0.25 * sin(uTime * (1.0 + h * 3.0) + h * 90.0);
-    col += star * tw * (0.25 + 0.75 * fract(h * 71.0)) * mix(vec3(0.75, 0.85, 1.0), vec3(1.0, 0.9, 0.75), fract(h * 13.0)) * (k == 0 ? 0.9 : 0.5);
+    float inBand = band * (0.30 + 0.5 * coreG) * (1.0 - dust * 0.85);
+    float prob = (k == 2 ? 0.035 + inBand * 2.2 : 0.05 + inBand * 1.3) + halo * (k == 2 ? 0.16 : 0.07); // 帶外的星也是越靠近銀河越密
+    float rr = length(f + (vec3(hash1(cell + 3.0), hash1(cell + 5.0), hash1(cell + 7.0)) - 0.5) * 0.4);
+    float m = fract(h * 71.0); m = m * m * m; // 星等：暗的多、亮的少
+    float star = step(1.0 - prob, h) * rs(0.20 + 0.14 * m, 0.0, rr);
+    float tw = 0.78 + 0.22 * sin(uTime * (1.0 + h * 3.0) + h * 90.0);
+    col += star * tw * (0.16 + 1.25 * m) * starTint(fract(h * 13.0)) * (k == 0 ? 1.15 : k == 1 ? 0.8 : 0.55) * (1.0 - dust * 0.5);
   }
   return col;
 }
@@ -90,35 +149,53 @@ void main(){
 }`;
 
 const starVert = /* glsl */ `
-attribute vec4 aStar; // 顏色 rgb、亮度
+attribute vec4 aStar; // 顏色 rgb、亮度（1 以上是少數特別亮的一等星，帶一圈光暈）
 attribute float aPhase;
 uniform float uTime, uNight, uPx, uStarBoost;
-varying vec4 vCol;
+varying vec4 vCol; varying float vGlow;
 void main(){
   vec3 d = normalize(position);
   float ext = smoothstep(-0.01, 0.2, d.y);
   float tw = 0.8 + 0.2 * sin(uTime * (1.5 + aPhase * 4.0) + aPhase * 60.0) * (1.4 - d.y);
   float b = aStar.w * tw * ext * uNight * uNight * (0.7 + 0.3 * uStarBoost);
   vCol = vec4(aStar.rgb, b);
+  vGlow = clamp((aStar.w - 0.8) / 0.8, 0.0, 1.0);
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mv;
-  gl_PointSize = (1.4 + aStar.w * 2.6) * uPx;
+  gl_PointSize = (1.3 + min(aStar.w, 1.0) * 2.4 + vGlow * 9.0) * uPx;
 }`;
 const starFrag = /* glsl */ `
-varying vec4 vCol;
+varying vec4 vCol; varying float vGlow;
 void main(){
   vec2 p = gl_PointCoord * 2.0 - 1.0;
   float r = dot(p, p);
   if (r > 1.0) discard;
-  float a = exp(-r * 4.5) * vCol.a;
-  gl_FragColor = vec4(vCol.rgb * a * 1.6, 1.0);
+  // 亮星的點比較大，但核心一樣小，多出來的是一圈淡淡的光暈
+  float core = exp(-r * mix(4.5, 42.0, vGlow));
+  float halo = vGlow * 0.10 * (1.0 - sqrt(r)) * (1.0 - sqrt(r));
+  gl_FragColor = vec4(mix(vCol.rgb, vec3(1.0), core * 0.5 * vGlow) * (core + halo) * vCol.a * 1.6, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
 
 const SKY_K = 16; // 流星的尺度（原本以 700 公尺設計，配合放大的天球）
 
-export function createSky(scene) {
+// 把銀河畫成貼圖（只做一次）
+function bakeMilkyWay(renderer) {
+  const rt = new THREE.WebGLRenderTarget(4096, 1024, { depthBuffer: false, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  const mat = new THREE.ShaderMaterial({ vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }', fragmentShader: bakeFrag, depthTest: false, depthWrite: false });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), mat);
+  quad.frustumCulled = false;
+  const sc = new THREE.Scene();
+  sc.add(quad);
+  renderer.setRenderTarget(rt);
+  renderer.render(sc, new THREE.Camera());
+  renderer.setRenderTarget(null);
+  mat.dispose(); quad.geometry.dispose();
+  return rt.texture;
+}
+
+export function createSky(scene, renderer) {
   let seed = 424242;
   const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
 
@@ -126,7 +203,7 @@ export function createSky(scene) {
   const uniforms = {
     uTop: G.skyTop, uHorizon: G.skyHorizon, uSunDir: G.sunDir, uSunCol: G.sunCol,
     uNight: G.night, uTime: G.uTime, uStarBoost: G.starBoost,
-    uSunDisc: { value: 1 }, uCloud: { value: 1 },
+    uSunDisc: { value: 1 }, uCloud: { value: 1 }, uMW: { value: bakeMilkyWay(renderer) },
   };
   const dome = new THREE.Mesh(
     new THREE.SphereGeometry(60000, 48, 24), // 比遠景的地形（46 公里）還大，星星才會被山擋住
@@ -140,13 +217,15 @@ export function createSky(scene) {
   dome.frustumCulled = false;
   scene.add(dome);
 
-  // --- 亮星：約 2600 顆，三成集中在銀河帶附近 ---
-  const N = 2600, pos = [], star = [], phase = [];
-  const d = new THREE.Vector3(), t = new THREE.Vector3(), u = new THREE.Vector3().crossVectors(MW_N, MW_C).normalize();
+  // --- 亮星：約 3400 顆，三成五集中在銀河帶附近（往銀心更密）---
+  // 色溫：藍白（O、B）、白（A）、黃白（F、G）、橙（K）、紅（M），亮星裡紅的少
+  const TEMPS = [[0.26, [0.62, 0.75, 1.0]], [0.30, [0.86, 0.91, 1.0]], [0.22, [1.0, 0.95, 0.82]], [0.15, [1.0, 0.78, 0.52]], [0.07, [1.0, 0.60, 0.42]]];
+  const N = 3400, pos = [], star = [], phase = [];
+  const d = new THREE.Vector3(), t = new THREE.Vector3(), u = MW_U;
   for (let i = 0; i < N; i++) {
-    if (rand() < 0.32) {
-      // 銀河帶上：沿大圓取一點，再往法向偏一點
-      const a = rand() * Math.PI * 2, off = (rand() + rand() + rand() - 1.5) * 0.14;
+    if (rand() < 0.35) {
+      // 銀河帶上：沿大圓取一點（一半偏向銀心那一側），再往法向偏一點
+      const a = rand() < 0.5 ? (rand() + rand() - 1) * 1.5 : rand() * Math.PI * 2, off = (rand() + rand() + rand() - 1.5) * 0.14;
       d.copy(MW_C).multiplyScalar(Math.cos(a)).addScaledVector(u, Math.sin(a)).addScaledVector(MW_N, off).normalize();
     } else {
       d.set(rand() * 2 - 1, rand() * 1.15 - 0.15, rand() * 2 - 1);
@@ -156,11 +235,11 @@ export function createSky(scene) {
     if (d.y < -0.05) { i--; continue; }
     t.copy(d).multiplyScalar(58000);
     pos.push(t.x, t.y, t.z);
-    // 亮度分布：暗星多、亮星少；顏色由偏藍到偏橙
-    const mag = Math.pow(rand(), 4.2);
-    const temp = rand();
-    const col = temp < 0.55 ? [0.78 + temp * 0.3, 0.86 + temp * 0.15, 1.0] : temp < 0.85 ? [1.0, 0.95, 0.86] : [1.0, 0.78, 0.55];
-    star.push(col[0], col[1], col[2], 0.16 + mag * 0.84);
+    // 星等：暗星多、亮星少；最前面的 26 顆是特別亮的一等星
+    const w = i < 26 ? 1.0 + rand() * 0.7 : 0.13 + Math.pow(rand(), 5.5) * 0.87;
+    let r = rand(), col = TEMPS[0][1];
+    for (const [p, c] of TEMPS) { if ((r -= p) < 0) { col = c; break; } }
+    star.push(col[0], col[1], col[2], w);
     phase.push(rand());
   }
   const sg = new THREE.BufferGeometry();
