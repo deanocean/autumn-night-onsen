@@ -11,7 +11,7 @@
 - Three.js 0.170 由 jsdelivr CDN 以 importmap 載入（含 `three/addons/`），預覽時需要網路。
 - 版本管理用 git：每完成一個段落就 commit。
 - **量卡頓**：`node tools/perf.js`（進場與日夜切換時超過 40 ms 的畫格、已編譯的 shader 數）。
-- **自己看畫面**：`node tools/shot.js [--night] [--top] 名稱:x,z,yaw,pitch ...`（無頭 Chrome，自己起伺服器；輸出在 `tools/shots/`，不進版本庫；首次使用先 `cd tools && npm install`）。yaw 0 朝北、π 朝南、正值往左（西）轉；`--top` 拍鳥瞰；`--eval=程式碼` 會在拍照前於頁面內執行（例如熄燈、`__onsen.camera.fov=24` 拉長焦看小物）；不給視角時拍預設五張。改完畫面相關的東西一定要自己拍照檢查，白天與夜晚都看；終端若印出 `pageerror`／`console error` 代表程式壞了。原圖是 3200×1800，檢視前先用 `sips -Z 1300` 縮小。
+- **自己看畫面**：`node tools/shot.js [--night] [--top] 名稱:x,z,yaw,pitch ...`（無頭 Chrome，自己起伺服器；輸出在 `tools/shots/`，不進版本庫，每次執行會自動刪掉裡面超過一小時的舊檔，要留的圖請另存到別處；首次使用先 `cd tools && npm install`）。yaw 0 朝北、π 朝南、正值往左（西）轉；`--top` 拍鳥瞰；`--eval=程式碼` 會在拍照前於頁面內執行（例如熄燈、`__onsen.camera.fov=24` 拉長焦看小物）；不給視角時拍預設五張。改完畫面相關的東西一定要自己拍照檢查，白天與夜晚都看；終端若印出 `pageerror`／`console error` 代表程式壞了。原圖是 3200×1800，檢視前先用 `sips -Z 1300` 縮小。
 - 使用者也會用截圖回報畫面問題。
 - **看遠景的構圖**：`node tools/pano.js [--map=半徑]`（不開瀏覽器，直接用 `terrain.js` 畫出從望景台看的山形剪影 `pano.png` 與俯視地圖 `map.png`，約 5 秒；調山脊、水域、聚落位置時先用它，定案再用 shot.js）。
 - 設計參考圖在 `reference/`（onsen01–05；遠景在 `reference/far/`）。

@@ -3,6 +3,7 @@
 // 用法：node tools/shot.js [--night] [--top] [--w=1600 --h=900] 名稱:x,z,yaw,pitch [...]
 //   yaw 0 朝北（-z，山谷），Math.PI 朝南（湯屋）；pitch 正值仰、負值俯。
 //   不給視角時拍預設的五張。輸出在 tools/shots/（不進版本庫）。
+//   每次執行會先刪掉 tools/shots/ 裡超過一小時的舊檔，資料夾只留這一輪工作的圖；要長期保留的請另存到別處。
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -10,6 +11,7 @@ const puppeteer = require('puppeteer-core');
 
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(__dirname, 'shots');
+const KEEP_MS = 60 * 60 * 1000; // 舊圖保留多久
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml',
@@ -56,6 +58,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${server.address().port}/`;
   fs.mkdirSync(OUT, { recursive: true });
+  // 清掉舊圖：不是整個清空，因為白天與夜晚要分兩次執行，得讓前一次的圖留著對照
+  const cutoff = Date.now() - KEEP_MS;
+  for (const name of fs.readdirSync(OUT)) {
+    const p = path.join(OUT, name);
+    if (fs.statSync(p).mtimeMs < cutoff) fs.rmSync(p, { recursive: true, force: true });
+  }
   const browser = await puppeteer.launch({
     executablePath: CHROME, headless: 'new',
     args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', `--window-size=${W},${H}`],
