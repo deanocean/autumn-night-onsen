@@ -47,23 +47,23 @@ void main(){
   dust = max(dust, rs(0.70, 1.0, vein) * 0.38 * (0.3 + 0.7 * n2 * 2.0) * rs(0.20, 0.04, abs(b - mid)) * rs(-0.2, 0.7, cu));
   // 雲氣：一團團亮的恆星雲
   float t1 = fbm(pw * 1.5 + 31.0), t2 = fbm(d * 19.0 + 3.0);
-  float cloud = (0.08 + 1.6 * t1) * (0.4 + 1.2 * t2);
+  float cloud = (0.30 + 1.2 * t1) * (0.55 + 0.9 * t2); // 對比壓低：雲團的邊界不要太清楚
   float dens = band * (0.40 + 0.55 * coreG + 0.5 * bulge) * cloud;
   // 核心偏暖（奶油黃），外側偏藍；最亮的地方接近白
-  vec3 tint = mix(vec3(0.40, 0.56, 1.0), vec3(1.0, 0.75, 0.47), rs(0.02, 0.75, coreG + bulge * 0.4));
+  vec3 tint = mix(vec3(0.40, 0.56, 1.0), vec3(0.90, 0.78, 0.74), rs(0.10, 1.0, coreG + bulge * 0.4));
   tint = mix(tint, vec3(1.0, 0.95, 0.9), rs(0.7, 1.8, dens) * 0.3);
   // 外圍的顏色往夜空的深藍靠，跟周圍的天空接起來
-  tint = mix(vec3(0.30, 0.44, 0.95), tint, rs(0.15, 0.85, band));
-  col = tint * dens * 0.235;
+  tint = mix(vec3(0.30, 0.44, 0.95), tint, rs(0.20, 1.0, band));
+  col = tint * dens * 0.098;
   // 帶外一圈很淡的藍紫色
   col += vec3(0.24, 0.34, 0.80) * exp(-b * b / (2.0 * 0.16 * 0.16)) * (0.034 + 0.06 * t1) * (0.6 + 0.4 * t2);
   // 塵埃吸掉星光，藍的吸得比紅的多：雲的邊緣帶褐色
-  col *= exp(-dust * vec3(1.9, 2.3, 2.75));
+  col *= exp(-dust * vec3(1.0, 1.2, 1.4));
   // 粉紅色的發光星雲：中線附近幾小團，加一大片很淡的紫紅
   float nb = fbm(vec3(u * 8.0, b * 9.0, 41.0) + vec3(w * 0.8, 0.0));
   float neb = rs(0.56, 0.74, nb) * exp(-(b - mid) * (b - mid) / 0.008) * (1.0 - dust * 0.6);
-  col += vec3(1.0, 0.30, 0.46) * neb * 0.22 * (0.4 + coreG);
-  col += vec3(0.75, 0.30, 0.62) * band * rs(0.38, 0.62, fbm2(vec3(u * 2.3, b * 3.0, 17.0))) * 0.06 * (0.4 + coreG);
+  col += vec3(0.95, 0.34, 0.56) * neb * 0.15 * (0.4 + coreG);
+  col += vec3(0.50, 0.32, 0.80) * band * rs(0.38, 0.62, fbm2(vec3(u * 2.3, b * 3.0, 17.0))) * 0.045 * (0.4 + coreG);
   float edge = rs(${MW_B.toFixed(2)}, ${(MW_B * 0.5).toFixed(2)}, abs(b)); // 貼圖邊界前淡出到 0
   gl_FragColor = vec4(sqrt(clamp(col * 0.5, 0.0, 1.0)) * edge, dust * edge);
 }`;
@@ -91,17 +91,18 @@ vec3 milkyWay(vec3 d){
   vec4 mw = texture2D(uMW, vec2(u / 6.2831853 + 0.5, clamp(b / ${(MW_B * 2).toFixed(2)} + 0.5, 0.0, 1.0)));
   vec3 col = mw.rgb * mw.rgb * 2.0;
   float dust = mw.a;
-  for (int k = 0; k < 3; k++) {
-    float sc = k == 0 ? 150.0 : k == 1 ? 250.0 : 400.0;
+  // 小星四層：前三層全天都有，第四層最細、只出現在銀河裡，讓銀河看起來是由無數星星聚成的
+  for (int k = 0; k < 4; k++) {
+    float sc = k == 0 ? 150.0 : k == 1 ? 250.0 : k == 2 ? 400.0 : 610.0;
     vec3 q = d * sc; vec3 cell = floor(q); vec3 f = fract(q) - 0.5;
     float h = hash1(cell + float(k) * 17.0);
     float inBand = band * (0.30 + 0.5 * coreG) * (1.0 - dust * 0.85);
-    float prob = (k == 2 ? 0.035 + inBand * 2.2 : 0.05 + inBand * 1.3) + halo * (k == 2 ? 0.16 : 0.07); // 帶外的星也是越靠近銀河越密
+    float prob = k == 3 ? inBand * 2.6 + halo * halo * 0.10 : (k == 2 ? 0.022 + inBand * 2.4 : 0.036 + inBand * 1.5) + halo * (k == 2 ? 0.13 : 0.06); // 帶外的星也是越靠近銀河越密
     float rr = length(f + (vec3(hash1(cell + 3.0), hash1(cell + 5.0), hash1(cell + 7.0)) - 0.5) * 0.4);
     float m = fract(h * 71.0); m = m * m * m; // 星等：暗的多、亮的少
     float star = step(1.0 - prob, h) * rs(0.20 + 0.14 * m, 0.0, rr);
     float tw = 0.78 + 0.22 * sin(uTime * (1.0 + h * 3.0) + h * 90.0);
-    col += star * tw * (0.16 + 1.25 * m) * starTint(fract(h * 13.0)) * (k == 0 ? 1.15 : k == 1 ? 0.8 : 0.55) * (1.0 - dust * 0.5);
+    col += star * tw * (0.16 + 1.25 * m) * starTint(fract(h * 13.0)) * (k == 0 ? 1.15 : k == 1 ? 0.8 : k == 2 ? 0.6 : 0.5) * (1.0 - dust * 0.5);
   }
   return col;
 }
