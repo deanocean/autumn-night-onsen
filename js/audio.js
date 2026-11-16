@@ -213,9 +213,9 @@ export function createAudio({ camera, player }) {
       soakK += ((soaking ? 1 : 0) - soakK) * (1 - Math.exp(-dt * 1.6));
       windT += dt;
       const set = (k, v) => { if (amb[k]) amb[k].gain.setTargetAtTime(v, now, 0.25); };
-      // 白天鳥鳴，黃昏漸歇，入夜後蟲鳴接上
-      set('birds', MIX.birds * (1 - smooth(0.08, 0.6, n)) * (1 - 0.25 * soakK));
-      set('crickets', MIX.crickets * smooth(0.4, 0.92, n));
+      // 白天鳥鳴；黃昏（n = 0.5）鳥聲剩三成、蟲鳴剛起約三成；入夜後只剩蟲鳴
+      set('birds', MIX.birds * (1 - smooth(0.1, 0.75, n)) * (1 - 0.25 * soakK));
+      set('crickets', MIX.crickets * smooth(0.28, 0.9, n));
       set('wind', MIX.wind * (0.75 + 0.25 * Math.sin(windT * 0.11) + 0.12 * Math.sin(windT * 0.37 + 1)));
       set('soak', MIX.soak * soakK);
 

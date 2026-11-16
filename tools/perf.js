@@ -73,19 +73,14 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const tIn = await mark();
     await report('進場後 4 秒', tLoad, tIn);
 
-    await page.evaluate(() => window.__onsen.dayNight.toggle());
-    await wait(8000);
-    const tNight = await mark();
-    await report('第一次切到夜晚', tIn, tNight);
-
-    await page.evaluate(() => window.__onsen.dayNight.toggle());
-    await wait(8000);
-    const tDay = await mark();
-    await report('切回白天', tNight, tDay);
-
-    await page.evaluate(() => window.__onsen.dayNight.toggle());
-    await wait(8000);
-    await report('第二次切到夜晚', tDay, await mark());
+    let tPrev = tIn;
+    for (const [phase, label] of [['dusk', '第一次切到黃昏'], ['night', '第一次切到夜晚'], ['day', '切回白天'], ['dusk', '第二次切到黃昏'], ['night', '第二次切到夜晚']]) {
+      await page.evaluate((p) => window.__onsen.dayNight.set(p), phase);
+      await wait(8000);
+      const tNow = await mark();
+      await report(label, tPrev, tNow);
+      tPrev = tNow;
+    }
   } finally {
     await browser.close();
     server.close();

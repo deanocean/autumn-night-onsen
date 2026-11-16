@@ -1,6 +1,6 @@
 // 開發用：用無頭 Chrome 開啟場景並截圖，讓 Claude 不必請使用者截圖就能看畫面。
 // 首次使用：cd tools && npm install
-// 用法：node tools/shot.js [--night] [--top] [--w=1600 --h=900] 名稱:x,z,yaw,pitch [...]
+// 用法：node tools/shot.js [--dusk|--night] [--top] [--w=1600 --h=900] 名稱:x,z,yaw,pitch [...]
 //   yaw 0 朝北（-z，山谷），Math.PI 朝南（湯屋）；pitch 正值仰、負值俯。
 //   不給視角時拍預設的五張。輸出在 tools/shots/（不進版本庫）。
 //   每次執行會先刪掉 tools/shots/ 裡超過兩小時的舊檔，資料夾只留這一輪工作的圖；要長期保留的請另存到別處。
@@ -27,7 +27,7 @@ const DEFAULTS = [
 
 const args = process.argv.slice(2);
 const flag = (k, d) => { const a = args.find((s) => s.startsWith(`--${k}=`)); return a ? Number(a.split('=')[1]) : d; };
-const night = args.includes('--night');
+const phase = args.includes('--night') ? 'night' : args.includes('--dusk') ? 'dusk' : 'day';
 const top = args.includes('--top'); // 鳥瞰（等同按 M）
 const W = flag('w', 1600), H = flag('h', 900);
 // --eval=程式碼：進場後、拍照前在頁面裡執行（例如熄掉某盞燈）
@@ -79,7 +79,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.waitForFunction(() => window.__onsen && window.__onsen.ready, { timeout: 60000 });
     await page.click('#start');
     await wait(1500);
-    if (night) { await page.evaluate(() => window.__onsen.dayNight.toggle()); await wait(7500); }
+    if (phase !== 'day') { await page.evaluate((p) => window.__onsen.dayNight.set(p), phase); await wait(7500); }
     if (evalCode) { const r = await page.evaluate(evalCode); if (r !== undefined) console.log('eval:', JSON.stringify(r)); await wait(300); }
     if (top) await page.evaluate(() => window.__onsen.guides.setTop(true));
     for (const [name, x, z, yaw, pitch] of views) {
@@ -88,7 +88,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         pl.pos.x = x; pl.pos.z = z; pl.yaw = yaw; pl.pitch = pitch; pl.vel.set(0, 0);
       }, x, z, yaw, pitch);
       await wait(1200);
-      const file = path.join(OUT, `${name}${night ? '-night' : ''}.jpg`);
+      const file = path.join(OUT, `${name}${phase !== 'day' ? '-' + phase : ''}.jpg`);
       await page.screenshot({ path: file, type: 'jpeg', quality: 88 });
       console.log('saved', file);
     }

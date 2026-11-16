@@ -12,7 +12,8 @@ export const G = {
   steamCol: { value: new THREE.Color(1, 1, 1) },
   steamDensity: { value: 1 },
   sunSpec: { value: 1 },    // 水面太陽高光的強度
-  night: { value: 0 },      // 0 = 白天，1 = 夜晚
+  night: { value: 0 },      // 0 = 白天，0.5 = 黃昏，1 = 夜晚
+  dusk: { value: 0 },       // 黃昏的程度（只在 night 0.5 附近不為 0），天空的晚霞用
   starBoost: { value: 1 },  // 熄燈後星空變亮的倍率（interact.js 驅動）
   steamBoost: { value: 1 }, // 泡湯時蒸氣變濃的倍率
   house: { value: 1 },      // 湯屋窗內的燈光（燈全熄時跟著暗下來）

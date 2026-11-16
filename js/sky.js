@@ -70,7 +70,7 @@ void main(){
 
 const skyFrag = /* glsl */ `
 uniform vec3 uTop, uHorizon, uSunDir, uSunCol;
-uniform float uNight, uTime, uSunDisc, uStarBoost, uCloud;
+uniform float uNight, uDusk, uTime, uSunDisc, uStarBoost, uCloud;
 uniform sampler2D uMW;
 varying vec3 vDir;
 ${GLSL_NOISE}
@@ -110,16 +110,33 @@ vec3 milkyWay(vec3 d){
 void main(){
   vec3 d = normalize(vDir);
   float h = clamp(d.y, 0.0, 1.0);
-  vec3 c = mix(uHorizon, uTop, pow(h, 0.5));
-  // 太陽與光暈
+  vec3 c = mix(uHorizon, uTop, pow(h, mix(0.5, 0.36, uDusk))); // 黃昏的暖色只留在低空，往上很快就是深藍
   float s = max(dot(d, uSunDir), 0.0);
+  // 黃昏的晚霞：朝太陽那一側的低空是金橙色，往上、往兩旁依序是粉紅、紫，再接到頭頂的深藍；
+  // 背對太陽那一側的地平線上有一道暗藍（地球的影子），上面一抹粉紅
+  float sa = 0.0;
+  if (uDusk > 0.0) {
+    sa = dot(normalize(d.xz + 1e-5), normalize(uSunDir.xz)) * 0.5 + 0.5;
+    float toSun = sa * sa * sa;
+    c = mix(c, vec3(0.86, 0.42, 0.50), uDusk * 0.42 * exp(-h * 6.0) * rs(0.0, 0.5, sa) * (1.0 - toSun)); // 兩旁的粉紅
+    c = mix(c, vec3(0.50, 0.36, 0.66), uDusk * 0.22 * exp(-(h - 0.26) * (h - 0.26) / 0.02) * (0.4 + 0.6 * sa));  // 中段的紫
+    c += vec3(1.0, 0.48, 0.12) * uDusk * toSun * (0.6 * exp(-h * 7.0) + 0.6 * exp(-h * 22.0));                 // 太陽上方的金橙
+    float anti = rs(0.5, 0.0, sa);
+    c = mix(c, vec3(0.80, 0.50, 0.58), uDusk * 0.45 * anti * exp(-(h - 0.12) * (h - 0.12) / 0.006));
+    c = mix(c, vec3(0.30, 0.34, 0.52), uDusk * 0.6 * anti * exp(-h * 22.0));
+  }
+  // 太陽與光暈
   c += uSunCol * (pow(s, 700.0) * 8.0 + pow(s, 14.0) * 0.25) * uSunDisc;
+  c += vec3(1.0, 0.88, 0.66) * 6.0 * rs(0.99990, 0.99995, s) * uSunDisc * uDusk; // 黃昏看得到輪廓清楚的日輪
   // 薄雲
   if (uCloud > 0.0 && d.y > 0.0) {
     vec2 p = d.xz / (d.y + 0.22);
     float cl = fbm(vec3(p * 1.1 + uTime * 0.004, 2.0)) * 0.65 + fbm(vec3(p * 3.4 - uTime * 0.006, 7.0)) * 0.35;
     cl = rs(0.5, 0.78, cl) * rs(0.0, 0.25, d.y);
-    c = mix(c, mix(uHorizon, vec3(1.0), 0.75) * (0.8 + 0.4 * uSunDisc), cl * 0.55 * uCloud);
+    vec3 cc = mix(uHorizon, vec3(1.0), 0.75) * (0.8 + 0.4 * uSunDisc * (1.0 - uDusk));
+    // 黃昏：雲被染成粉橘，朝太陽那邊偏金
+    cc = mix(cc, mix(vec3(0.95, 0.50, 0.50), vec3(1.0, 0.62, 0.30), sa * sa) * (0.75 + 0.5 * sa), uDusk * 0.8);
+    c = mix(c, cc, cl * 0.55 * uCloud);
   }
   // 海平線上的一排積雲：有高有低、底部平、頂部一團團，天空在最遠的山後面才不會是空的
   if (d.y > -0.01) {
@@ -128,8 +145,11 @@ void main(){
     float puff = fbm(vec3(az * 11.0 + uTime * 0.0015, e * 46.0, 6.0));
     float cb = rs(top, top * 0.3, e + (0.5 - puff) * 0.07) * rs(-0.004, 0.012, e);
     // 底部是藍灰的陰影、頂部受光；夜裡只是比天空略亮的一抹
-    vec3 lit = mix(mix(uHorizon, uTop, 0.5) * 0.9, mix(uHorizon, vec3(1.0), 0.85) * (0.8 + 0.4 * uSunDisc), rs(0.1, 0.9, (e + (puff - 0.5) * 0.06) / top));
-    lit = mix(lit, uSunCol, 0.25 * (1.0 - uSunDisc) * (1.0 - uNight));
+    float up = rs(0.1, 0.9, (e + (puff - 0.5) * 0.06) / top);
+    vec3 lit = mix(mix(uHorizon, uTop, 0.5) * 0.9, mix(uHorizon, vec3(1.0), 0.85) * (0.8 + 0.4 * uSunDisc * (1.0 - uDusk)), up);
+    // 黃昏：太陽在雲的後下方，雲身是藍紫的剪影，邊緣鑲一圈金紅
+    lit = mix(lit, mix(vec3(0.34, 0.28, 0.46), vec3(0.95, 0.46, 0.36), up * (0.35 + 0.65 * sa)), uDusk * 0.85);
+    lit += vec3(1.0, 0.55, 0.2) * uDusk * 0.5 * sa * sa * sa * rs(0.35, 0.0, abs(cb - 0.5)) ;
     lit = mix(lit, uHorizon * 1.5 + vec3(0.004, 0.006, 0.01), uNight);
     c = mix(c, lit, cb * mix(0.9, 0.7, uNight));
   }
@@ -140,9 +160,10 @@ void main(){
     c += vec3(1.0, 0.6, 0.32) * 0.05 * lobe * exp(-max(d.y, 0.0) * 13.0) * uNight;
   }
   // 夜空
-  if (uNight > 0.01) {
+  if (uNight > 0.5) {
     float ext = rs(-0.02, 0.22, d.y); // 接近地平線的星光被大氣削弱
-    c += milkyWay(d) * ext * uNight * uNight * uStarBoost;
+    float nk = rs(0.5, 1.0, uNight); // 小星與銀河要等天色暗下來才出現；黃昏只看得到最亮的幾顆（另外畫的亮星）
+    c += milkyWay(d) * ext * nk * nk * uStarBoost;
   }
   gl_FragColor = vec4(c, 1.0);
   #include <tonemapping_fragment>
@@ -152,13 +173,16 @@ void main(){
 const starVert = /* glsl */ `
 attribute vec4 aStar; // 顏色 rgb、亮度（1 以上是少數特別亮的一等星，帶一圈光暈）
 attribute float aPhase;
-uniform float uTime, uNight, uPx, uStarBoost;
+uniform float uTime, uNight, uDusk, uPx, uStarBoost;
 varying vec4 vCol; varying float vGlow;
 void main(){
   vec3 d = normalize(position);
   float ext = smoothstep(-0.01, 0.2, d.y);
   float tw = 0.8 + 0.2 * sin(uTime * (1.5 + aPhase * 4.0) + aPhase * 60.0) * (1.4 - d.y);
-  float b = aStar.w * tw * ext * uNight * uNight * (0.7 + 0.3 * uStarBoost);
+  // 越亮的星越早出現：黃昏時只有一等星與少數亮星
+  float th = mix(0.72, 0.36, clamp(aStar.w, 0.0, 1.2) / 1.2);
+  float vis = smoothstep(th, th + 0.28, uNight) * mix(1.0, smoothstep(0.12, 0.5, d.y), uDusk); // 黃昏時低空還亮，星星被天光蓋掉
+  float b = aStar.w * tw * ext * vis * (0.7 + 0.3 * uStarBoost);
   vCol = vec4(aStar.rgb, b);
   vGlow = clamp((aStar.w - 0.8) / 0.8, 0.0, 1.0);
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
@@ -203,7 +227,7 @@ export function createSky(scene, renderer) {
   // --- 天球 ---
   const uniforms = {
     uTop: G.skyTop, uHorizon: G.skyHorizon, uSunDir: G.sunDir, uSunCol: G.sunCol,
-    uNight: G.night, uTime: G.uTime, uStarBoost: G.starBoost,
+    uNight: G.night, uDusk: G.dusk, uTime: G.uTime, uStarBoost: G.starBoost,
     uSunDisc: { value: 1 }, uCloud: { value: 1 }, uMW: { value: bakeMilkyWay(renderer) },
   };
   const dome = new THREE.Mesh(
@@ -248,7 +272,7 @@ export function createSky(scene, renderer) {
   sg.setAttribute('aStar', new THREE.Float32BufferAttribute(star, 4));
   sg.setAttribute('aPhase', new THREE.Float32BufferAttribute(phase, 1));
   const starMat = new THREE.ShaderMaterial({
-    uniforms: { uTime: G.uTime, uNight: G.night, uStarBoost: G.starBoost, uPx: { value: Math.min(devicePixelRatio, 2) } },
+    uniforms: { uTime: G.uTime, uNight: G.night, uDusk: G.dusk, uStarBoost: G.starBoost, uPx: { value: Math.min(devicePixelRatio, 2) } },
     vertexShader: starVert, fragmentShader: starFrag,
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
   });

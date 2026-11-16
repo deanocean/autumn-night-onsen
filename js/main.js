@@ -81,10 +81,10 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
+// 白天 → 黃昏 → 夜晚 → 白天；按鈕上寫的是下一個時段
+const NEXT_LABEL = { day: '切換到黃昏', dusk: '切換到夜晚', night: '切換到白天' };
 function toggleTime() {
-  const night = dayNight.toggle();
-  timeBtn.textContent = night ? '切換到白天' : '切換到夜晚';
-  timeBtn.setAttribute('aria-pressed', night ? 'true' : 'false');
+  timeBtn.textContent = NEXT_LABEL[dayNight.next()];
 }
 
 startBtn.addEventListener('click', () => {
@@ -129,7 +129,7 @@ const clock = new THREE.Clock();
 
 // 暖機：在開始畫面就把所有 shader 編好、貼圖送進顯示卡，進場與第一次切到夜晚時才不會頓。
 // 做法是把平常隱藏的東西（發亮的殼、水珠、流星、標籤……）暫時全部打開、關掉視錐剔除，
-// 在白天與夜晚各實際畫一次（含陰影與水面倒影），再還原。整段在同一個工作裡完成，
+// 在夜晚、黃昏、白天各實際畫一次（含陰影與水面倒影），再還原。整段在同一個工作裡完成，
 // 瀏覽器只會顯示最後那張正常的畫面。
 async function warmUp() {
   await Promise.race([texturesReady(), new Promise((r) => setTimeout(r, 20000))]);
@@ -139,8 +139,8 @@ async function warmUp() {
     if (!o.visible) { hidden.push(o); o.visible = true; }
     if (o.frustumCulled) { culled.push(o); o.frustumCulled = false; }
   });
-  for (const night of [true, false]) {
-    dayNight.set(night, true);
+  for (const phase of ['night', 'dusk', 'day']) {
+    dayNight.set(phase, true);
     sky.update(0, camera);
     vista.update(0);
     renderer.render(scene, camera);

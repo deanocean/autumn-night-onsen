@@ -795,7 +795,7 @@ export function createVista(scene, { sun, hemi }) {
       uniforms.uHemiSky.value.copy(hemi.color);
       uniforms.uHemiGround.value.copy(hemi.groundColor);
       uniforms.uHemiI.value = hemi.intensity;
-      uniforms.uLit.value = Math.min(1, Math.max(0, (G.night.value - 0.3) / 0.5));
+      uniforms.uLit.value = Math.min(1, Math.max(0, (G.night.value - 0.3) / 0.45)); // 黃昏時聚落的燈亮了四成多
       lightPts.visible = streaks.visible = uniforms.uLit.value > 0;
     },
   };
