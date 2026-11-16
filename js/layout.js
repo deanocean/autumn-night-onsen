@@ -32,11 +32,32 @@ export const BOUNDS = { x0: -13.8, x1: 13.8, z0: -12.1, z1: 10.6 };
 export const YUYA = { x0: -11.5, x1: 3.5, z0: 11, z1: 16, h: 3.4 };
 export const AZUMAYA = { x0: -9.2, x1: -4.4, z0: -3.6, z1: 1.6, eave: 2.5, ridge: 3.7 };
 
+// 足湯：望景木台北緣的檜木槽。由南往北依序是坐板（seatZ1 → seatZ0）、水槽（→ tubZ0）、外側的矮欄（railZ）。
+// 高度都是相對木台面：h 槽緣與坐板、waterY 水面、floorY 槽底、railH 矮欄頂
+export const ASHIYU = {
+  x0: -2.5, x1: 2.5, seatZ1: -11.0, seatZ0: -11.5, tubZ0: -12.2, railZ: -12.5,
+  h: 0.4, waterY: 0.31, floorY: 0.06, wall: 0.06, railH: 0.56,
+  spoutX: 2.5, // 注水的竹筒在東端
+};
+ASHIYU.spout = { x: ASHIYU.x1 - 0.24, y: DECK.y + 0.6, z: (ASHIYU.tubZ0 + ASHIYU.seatZ0) / 2 }; // 竹筒出水口
+// 西翼：一小塊低木台，上面一張躺椅（頭朝南、腳朝海灣）與小几
+export const LOUNGE = {
+  x0: -10.4, x1: -7.6, z0: -11.9, z1: -8.9, y: 0.12,
+  chair: { x: -9.25, z: -10.35, rot: -0.14 }, // rot：繞 y 軸；0 時腳朝正北
+  table: { x: -8.3, z: -10.0 },
+  parasol: { x: -7.8, z: -9.1, r: 0.92 }, // 野点傘：立在躺椅的右後方，不擋仰望的視野
+};
+// 東翼：壺湯的預定地（下一段才做；現在只有一圈石緣示意範圍）
+export const TSUBO = { x: 9.8, z: -9.5, r: 1.7 };
+// 崖邊欄杆：木台兩側到東西竹垣（z 與木台正面的欄杆同一條線）
+export const CLIFF_RAILS = [{ x0: -14.2, x1: DECK.x0 }, { x0: DECK.x1, x1: 14.2 }];
+
 // 腳下的地面高度
 export function groundY(x, z) {
   if (x > ENGAWA.x0 && x < ENGAWA.x1 && z > ENGAWA.z0 - 0.1) return ENGAWA.y;
   if (x > ENGAWA.x0 + 3 && x < ENGAWA.x0 + 7 && z > ENGAWA.z0 - 0.75) return ENGAWA.y * 0.5; // 沓脫石
   if (x > DECK.x0 && x < DECK.x1 && z < DECK.z1) return DECK.y;
+  if (x > LOUNGE.x0 && x < LOUNGE.x1 && z > LOUNGE.z0 && z < LOUNGE.z1) return LOUNGE.y;
   const t = poolT(x, z);
   if (t < 1) return -POOL.depth * smooth(1, 0.78, t);
   return 0;
@@ -86,12 +107,30 @@ boxes.push({ x0: YUYA.x0, x1: YUYA.x1, z0: YUYA.z0 - 0.15, z1: YUYA.z1 });
 export const ENGAWA_POSTS = [-10.6, -7, -3.4, 0.2, 2.6].map((x) => [x, ENGAWA.z0 + 0.25]);
 ENGAWA_POSTS.forEach(([x, z]) => circles.push({ x, z, r: 0.12 }));
 
-// 望景台欄杆與長椅
+// 望景台欄杆與足湯；崖邊欄杆
 boxes.push({ x0: DECK.x0, x1: DECK.x1, z0: DECK.z0 - 0.1, z1: DECK.z0 + 0.1 });
 boxes.push({ x0: DECK.x0 - 0.1, x1: DECK.x0 + 0.1, z0: DECK.z0, z1: DECK.z1 - 1.2 });
 boxes.push({ x0: DECK.x1 - 0.1, x1: DECK.x1 + 0.1, z0: DECK.z0, z1: DECK.z1 - 1.2 });
-export const BENCH = { x: 0, z: -10.2, w: 2.4, d: 0.5, h: 0.42 };
-boxes.push({ x0: BENCH.x - BENCH.w / 2, x1: BENCH.x + BENCH.w / 2, z0: BENCH.z - BENCH.d / 2, z1: BENCH.z + BENCH.d / 2 });
+boxes.push({ x0: ASHIYU.x0 - ASHIYU.wall, x1: ASHIYU.x1 + ASHIYU.wall, z0: ASHIYU.tubZ0 - ASHIYU.wall, z1: ASHIYU.seatZ1 });
+CLIFF_RAILS.forEach((r) => boxes.push({ x0: r.x0, x1: r.x1, z0: DECK.z0 - 0.1, z1: DECK.z0 + 0.1 }));
+
+// 躺椅（沿椅身排三個圓）與小几
+for (const s of [-0.6, 0, 0.6]) {
+  const c = LOUNGE.chair;
+  circles.push({ x: c.x - Math.sin(c.rot) * s, z: c.z + Math.cos(c.rot) * s, r: 0.36 });
+}
+circles.push({ x: LOUNGE.table.x, z: LOUNGE.table.z, r: 0.24 });
+circles.push({ x: LOUNGE.parasol.x, z: LOUNGE.parasol.z, r: 0.14 });
+
+// 不撒落葉的範圍（足湯、躺椅與小几）
+export function noLeaf(x, z) {
+  if (x > ASHIYU.x0 - 0.1 && x < ASHIYU.x1 + 0.1 && z > ASHIYU.tubZ0 - 0.1 && z < ASHIYU.seatZ1 + 0.03) return true;
+  const c = LOUNGE.chair, dx = x - c.x, dz = z - c.z;
+  const u = dx * Math.cos(c.rot) + dz * Math.sin(c.rot), v = -dx * Math.sin(c.rot) + dz * Math.cos(c.rot);
+  if (Math.abs(u) < 0.4 && Math.abs(v) < 1.05) return true;
+  if (Math.hypot(x - LOUNGE.parasol.x, z - LOUNGE.parasol.z) < 0.22) return true;
+  return Math.hypot(x - LOUNGE.table.x, z - LOUNGE.table.z) < 0.3;
+}
 
 // 竹垣（東、西兩側；北側不設，視野敞開）
 export const FENCES = [
@@ -145,6 +184,8 @@ export const START = { x: -5.2, z: 10.1, yaw: 0.12 };
 export function zoneAt(x, z) {
   if (x > ENGAWA.x0 && x < ENGAWA.x1 && z > ENGAWA.z0 - 0.1) return '湯屋簷廊';
   if (x > DECK.x0 && x < DECK.x1 && z < DECK.z1) return '望景木台';
+  if (x > LOUNGE.x0 && x < LOUNGE.x1 && z > LOUNGE.z0 && z < LOUNGE.z1) return '西翼・躺椅';
+  if (Math.hypot(x - TSUBO.x, z - TSUBO.z) < TSUBO.r) return '東翼・壺湯（準備中）';
   if (inWater(x, z)) {
     return x > AZUMAYA.x0 && x < AZUMAYA.x1 && z > AZUMAYA.z0 && z < AZUMAYA.z1 ? '半露天區（池中）' : '主池';
   }
@@ -161,7 +202,9 @@ export const LABELS = [
   ['主池', 0.5, 2.4, -2.6],
   ['池中大岩', CENTER_ROCK.x, 1.9, CENTER_ROCK.z],
   ['湯口', YUGUCHI.x + 0.6, 2.6, YUGUCHI.z],
-  ['望景木台', 0, 2.4, -10.5],
+  ['望景木台・足湯', 0, 2.4, -10.8],
+  ['躺椅', LOUNGE.chair.x, 1.9, LOUNGE.chair.z],
+  ['壺湯（預定地）', TSUBO.x, 1.6, TSUBO.z],
   ['海灣・遠山（敞開面）', 0, 5.5, -26],
   ['鹿威し', PROPS.shishi.x, 1.6, PROPS.shishi.z],
   ['木桶', PROPS.oke.x, 1.2, PROPS.oke.z],

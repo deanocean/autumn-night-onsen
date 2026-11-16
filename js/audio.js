@@ -16,6 +16,7 @@ const MIX = {
   master: 0.9,
   stream: 1.5,     // 湯口（有方位，越近越大聲）
   soak: 0.42,      // 泡湯時貼在耳邊的水聲
+  foot: 0.5,       // 足湯竹筒的細水聲（有方位，只在木台上聽得到）
   birds: 0.6,
   crickets: 0.3,
   wind: 0.26,
@@ -79,6 +80,12 @@ export function createAudio({ camera, player }) {
       sg.gain.value = 0;
       amb.soak = sg;
       loopSource(name, 0.72, 19).connect(lp).connect(sg).connect(master);
+      // 足湯的注水：同一份水聲調高、調小，定位在竹筒口，走近才聽得到
+      const fg = ctx.createGain();
+      fg.gain.value = MIX.foot;
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass'; hp.frequency.value = 900;
+      loopSource(name, 1.35, 31).connect(hp).connect(fg).connect(panner({ x: L.ASHIYU.spout.x, y: L.DECK.y + L.ASHIYU.waterY, z: L.ASHIYU.spout.z }, 1.0, 1.6));
     } else {
       loopSource(name, 1, rnd() * LOOPS[name]).connect(g).connect(master);
     }
@@ -259,6 +266,17 @@ export function createAudio({ camera, player }) {
       if (!ctx) return;
       play('splash', { rate: entering ? 0.72 : 0.85, gain: 0.55, fade: 0.9 });
       if (!entering) play('pour', { delay: 0.5, offset: 0.9, dur: 1.0, rate: 1.25, gain: 0.22, fade: 0.6 });
+    },
+    // 足湯：腳放進水裡、抽出來的小水聲
+    foot(entering, at) {
+      if (!ctx) return;
+      play('splash', { at, ref: 1.5, offset: 0.05, dur: 1.0, rate: entering ? 1.35 : 1.5, gain: entering ? 0.3 : 0.22, fade: 0.6 });
+    },
+    // 躺椅：躺下時木頭輕輕一響
+    chair(at) {
+      if (!ctx) return;
+      tone({ at, freq: 150, freqEnd: 110, dur: 0.14, attack: 0.01, gain: 0.3 });
+      burst({ at, freq: 700, q: 3, dur: 0.07, attack: 0.008, gain: 0.12, delay: 0.05 });
     },
     leaf(at) {
       if (!ctx) return;

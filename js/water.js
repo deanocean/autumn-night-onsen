@@ -3,7 +3,7 @@
 // 反射則是把場景從水面下方再畫一次（平面反射），所以岩石、屋簷、之後的燈籠都會映在水裡。
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
-import { POOL, poolPoint, YUGUCHI } from './layout.js';
+import { POOL, poolPoint, YUGUCHI, ASHIYU, DECK } from './layout.js';
 import { GLSL_NOISE, GLSL_POOL } from './shaders.js';
 import { G } from './env.js';
 
@@ -111,6 +111,75 @@ void main(){
   #include <colorspace_fragment>
 }`;
 
+// 小水面（足湯）：不做平面反射（每多一面就要把整個場景再畫一次），只映天空的顏色。
+// 水很淺，半透明看得到槽底的木板。
+const stillFrag = /* glsl */ `
+uniform float uTime, uSunSpec, uNight;
+uniform vec3 uSunDir, uSunCol, uAmbient, uBody, uSkyTop, uSkyHorizon, uLampCol;
+uniform vec4 uRip[4];
+uniform vec4 uLampPos[16];
+varying vec3 vW;
+${GLSL_NOISE}
+float waveH(vec2 p){
+  float t = uTime;
+  float h = 0.6 * vnoise(vec3(p * 3.2 + t * vec2(-0.16, 0.05), t * 0.2));
+  h += 0.4 * vnoise(vec3(p * 8.5 + t * vec2(-0.28, -0.12), t * 0.3));
+  h *= 0.012;
+  for (int i = 0; i < 4; i++) {
+    vec4 r = uRip[i];
+    float age = t - r.z;
+    if (age > 0.0 && age < 5.0) {
+      float d = distance(p, r.xy);
+      float front = age * 0.5;
+      float env = exp(-pow((d - front) * 3.5, 2.0)) * exp(-age * 0.8) / (1.0 + d * 1.5);
+      h += sin((d - front) * 24.0) * env * r.w * 0.012;
+    }
+  }
+  return h;
+}
+void main(){
+  vec2 p = vW.xz;
+  float e = 0.025;
+  float h0 = waveH(p), hx = waveH(p + vec2(e, 0.0)), hz = waveH(p + vec2(0.0, e));
+  vec3 n = normalize(vec3(-(hx - h0) / e, 1.0, -(hz - h0) / e));
+  vec3 V = normalize(cameraPosition - vW);
+  float fres = 0.03 + 0.97 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
+  vec3 R = reflect(-V, n);
+  vec3 sky = mix(uSkyHorizon, uSkyTop, pow(clamp(R.y, 0.0, 1.0), 0.5));
+  float glow = 0.0;
+  for (int i = 0; i < 16; i++) { vec3 dl = uLampPos[i].xyz - vW; glow += uLampPos[i].w / (1.0 + dot(dl, dl) * 0.22); }
+  vec3 body = uBody * uAmbient * mix(1.0, 0.32, uNight) + uLampCol * (uBody + 0.1) * glow;
+  vec3 col = mix(body, sky, fres);
+  vec3 Hv = normalize(uSunDir + V);
+  col += uSunCol * pow(max(dot(n, Hv), 0.0), 380.0) * 5.0 * uSunSpec;
+  gl_FragColor = vec4(col, mix(0.62, 1.0, fres));
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+
+// 沿拋物線落下的水柱：兩片交叉的薄帶。tip 出水口、dx 落水時的水平位移、bottom 水面高度
+function streamGeometry(tip, dx, bottom, w0, w1, SEG = 14) {
+  const pos = [], uv = [], idx = [];
+  const drop = tip.y - bottom;
+  for (const cross of [0, 1]) {
+    const base = pos.length / 3;
+    for (let i = 0; i <= SEG; i++) {
+      const s = i / SEG;
+      const x = tip.x + s * dx, y = tip.y - drop * s * s;
+      const w = w0 + s * (w1 - w0);
+      const oy = cross ? w : 0, oz = cross ? 0 : w;
+      pos.push(x, y - oy, tip.z - oz, x, y + oy, tip.z + oz);
+      uv.push(0, s * 3, 1, s * 3);
+      if (i < SEG) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
 export function createWater(scene) {
   const N = 128;
   const shape = new THREE.Shape();
@@ -153,26 +222,9 @@ export function createWater(scene) {
   water.renderOrder = 2;
   scene.add(water);
 
-  // 水柱：沿拋物線的兩片交叉薄帶
-  const tip = new THREE.Vector3(YUGUCHI.x + 0.02, YUGUCHI.y, YUGUCHI.z);
-  const pos = [], uv = [], idx = [];
-  const SEG = 14, drop = tip.y - POOL.waterY;
-  for (const cross of [0, 1]) {
-    const base = pos.length / 3;
-    for (let i = 0; i <= SEG; i++) {
-      const s = i / SEG;
-      const x = tip.x - s * 0.44, y = tip.y - 0.03 - drop * s * s;
-      const w = 0.045 + s * 0.05;
-      const ox = cross ? 0 : 0, oy = cross ? w : 0, oz = cross ? 0 : w;
-      pos.push(x - ox, y - oy, tip.z - oz, x + ox, y + oy, tip.z + oz);
-      uv.push(0, s * 3, 1, s * 3);
-      if (i < SEG) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-    }
-  }
-  const sg = new THREE.BufferGeometry();
-  sg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  sg.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  sg.setIndex(idx);
+  // 湯口的水柱
+  const tip = new THREE.Vector3(YUGUCHI.x + 0.02, YUGUCHI.y - 0.03, YUGUCHI.z);
+  const sg = streamGeometry(tip, -0.44, POOL.waterY - 0.03, 0.045, 0.095);
   const stream = new THREE.Mesh(sg, new THREE.ShaderMaterial({
     uniforms: { uTime: G.uTime, uAmbient: G.ambient },
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -180,6 +232,37 @@ export function createWater(scene) {
   }));
   stream.renderOrder = 3;
   scene.add(stream);
+
+  // ---------- 足湯 ----------
+  const A = ASHIYU, footY = DECK.y + A.waterY;
+  const footRip = Array.from({ length: 4 }, () => new THREE.Vector4(0, 0, -100, 0));
+  const footMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(A.x1 - A.x0, A.seatZ0 - A.tubZ0).rotateX(-Math.PI / 2),
+    new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: G.uTime, uSunDir: G.sunDir, uSunCol: G.sunCol, uAmbient: G.ambient, uSunSpec: G.sunSpec,
+        uSkyTop: G.skyTop, uSkyHorizon: G.skyHorizon, uLampPos: G.lampPos, uLampCol: G.lampCol,
+        uBody: { value: new THREE.Color(0.15, 0.56, 0.58) }, uNight: G.night, uRip: { value: footRip },
+      },
+      vertexShader: 'varying vec3 vW; void main(){ vec4 wp = modelMatrix * vec4(position, 1.0); vW = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }',
+      fragmentShader: stillFrag, transparent: true, depthWrite: false,
+    }),
+  );
+  footMesh.position.set((A.x0 + A.x1) / 2, footY, (A.tubZ0 + A.seatZ0) / 2);
+  footMesh.renderOrder = 2;
+  scene.add(footMesh);
+  const footStream = new THREE.Mesh(streamGeometry(new THREE.Vector3(A.spout.x, A.spout.y, A.spout.z), -0.07, footY, 0.012, 0.02, 10), stream.material);
+  footStream.renderOrder = 3;
+  scene.add(footStream);
+  const footLanding = { x: A.spout.x - 0.07, z: A.spout.z };
+  let footCur = 0, footTimer = 0;
+  const foot = {
+    mesh: footMesh, y: footY, landing: footLanding,
+    addRipple(x, z, strength = 1) {
+      footRip[footCur].set(x, z, G.uTime.value, strength);
+      footCur = (footCur + 1) % 4;
+    },
+  };
 
   let next = 0, cursor = 0, spoutTimer = 0;
   function addRipple(x, z, strength = 1) {
@@ -191,10 +274,13 @@ export function createWater(scene) {
     mesh: water,
     landing,
     addRipple,
+    foot,
     update(dt) {
       // 湯口落水處不斷送出同心漣漪
       spoutTimer -= dt;
       if (spoutTimer <= 0) { addRipple(landing.x, landing.z, 0.9); spoutTimer = 0.55; }
+      footTimer -= dt;
+      if (footTimer <= 0) { foot.addRipple(footLanding.x, footLanding.z, 0.7); footTimer = 1.3; }
       next = Math.max(0, next - dt);
     },
     // 人在水中移動時留下的漣漪；回傳是否真的產生了一圈

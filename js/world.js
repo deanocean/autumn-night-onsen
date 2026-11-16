@@ -5,6 +5,7 @@ import * as L from './layout.js';
 import { patch } from './shaders.js';
 import { G } from './env.js';
 import { shojiTextures } from './shoji.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const std = (o = {}) => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, ...o });
 
@@ -52,6 +53,25 @@ function wbox(g, w, h, d, x, y, z, color = CEDAR_DARK, o = {}) {
   return box(g, w, h, d, x, y, z, wood(color, grain, o.plank || 0, o.weather ?? 0.45, !!o.plankY));
 }
 const cyl = (g, r0, r1, h, x, y, z, m, seg = 12) => mesh(g, new THREE.CylinderGeometry(r0, r1, h, seg), m, x, y, z);
+
+// 把一批沒有旋轉的零件依材質合併成少數幾個 mesh 再放進場景（欄杆、足湯這類零件很多的靜態物件用；
+// 每個 mesh 在主畫面、陰影、水面倒影各要畫一次，零件一多就拖慢）。木紋是照物件座標畫的，平移不影響走向。
+function bake(parent, g) {
+  g.updateMatrixWorld(true);
+  const by = new Map();
+  g.traverse((o) => {
+    if (!o.isMesh) return;
+    const geo = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+    geo.applyMatrix4(o.matrixWorld);
+    if (!by.has(o.material)) by.set(o.material, []);
+    by.get(o.material).push(geo);
+  });
+  for (const [m, list] of by) {
+    const o = new THREE.Mesh(mergeGeometries(list), m);
+    o.castShadow = o.receiveShadow = true;
+    parent.add(o);
+  }
+}
 
 export function rng(seed) {
   let s = seed >>> 0;
@@ -477,30 +497,83 @@ export function buildWorld(scene) {
   }
 
   // ---------- 望景木台 ----------
+  const dk = new THREE.Group(); // 欄杆、足湯、躺椅木台的零件先收在這裡，最後合併
   {
     const D = L.DECK, w = D.x1 - D.x0, cx = (D.x0 + D.x1) / 2, d = D.z1 - D.z0 + 0.6, cz = (D.z0 + D.z1) / 2 - 0.3;
     wbox(world, w, 0.05, d, cx, D.y - 0.025, cz, DECK_WOOD, { grain: 0, plank: 0.13, weather: 0.7 });
     wbox(world, w, D.y - 0.05, 0.06, cx, (D.y - 0.05) / 2, D.z1 - 0.03, CEDAR);
     for (const x of [D.x0 + 0.03, D.x1 - 0.03]) wbox(world, 0.06, D.y - 0.05, d, x, (D.y - 0.05) / 2, cz, CEDAR);
     for (let x = D.x0 + 0.2; x <= D.x1; x += 1.4) for (const z of [D.z0 - 0.4, D.z0 + 1.6]) wbox(world, 0.14, 4, 0.14, x, D.y - 2.05, z, CEDAR_DARK);
-    // 欄杆
-    const top = D.y + 0.86;
-    wbox(world, w + 0.1, 0.07, 0.1, cx, top, D.z0, CEDAR_DARK);
-    wbox(world, w, 0.045, 0.05, cx, D.y + 0.45, D.z0, CEDAR_DARK);
-    for (let x = D.x0; x <= D.x1 + 0.01; x += 1.5) wbox(world, 0.09, 0.86, 0.09, x, D.y + 0.43, D.z0, CEDAR_DARK);
+    // 欄杆：正面中段（足湯前）是矮欄，兩旁與側面是高欄
+    const top = D.y + 0.86, A = L.ASHIYU, lowX = 2.7;
+    for (const sd of [-1, 1]) {
+      const xm = sd * (lowX + D.x1) / 2, len = D.x1 - lowX;
+      wbox(dk, len + 0.1, 0.07, 0.1, xm, top, D.z0, CEDAR_DARK);
+      wbox(dk, len, 0.045, 0.05, xm, D.y + 0.45, D.z0, CEDAR_DARK);
+      for (const x of [lowX, (lowX + D.x1) / 2, D.x1]) wbox(dk, 0.09, 0.86, 0.09, sd * x, D.y + 0.43, D.z0, CEDAR_DARK);
+    }
+    wbox(dk, lowX * 2, 0.06, 0.09, cx, D.y + A.railH, A.railZ, CEDAR_DARK);
+    for (const x of [-1.35, 0, 1.35]) wbox(dk, 0.075, A.railH, 0.075, x, D.y + A.railH / 2, A.railZ, CEDAR_DARK);
     for (const x of [D.x0, D.x1]) {
       const len = D.z1 - D.z0 - 1.2, zz = D.z0 + len / 2;
-      wbox(world, 0.1, 0.07, len, x, top, zz, CEDAR_DARK);
-      wbox(world, 0.05, 0.045, len, x, D.y + 0.45, zz, CEDAR_DARK);
-      wbox(world, 0.09, 0.86, 0.09, x, D.y + 0.43, D.z0 + len, CEDAR_DARK);
+      wbox(dk, 0.1, 0.07, len, x, top, zz, CEDAR_DARK);
+      wbox(dk, 0.05, 0.045, len, x, D.y + 0.45, zz, CEDAR_DARK);
+      wbox(dk, 0.09, 0.86, 0.09, x, D.y + 0.43, D.z0 + len, CEDAR_DARK);
     }
-    // 長椅
-    const B = L.BENCH;
-    wbox(world, B.w, 0.055, B.d, B.x, D.y + B.h, B.z, DECK_WOOD, { grain: 0, plank: 0.165, weather: 0.5 });
-    for (const sx of [-1, 1]) {
-      wbox(world, 0.07, B.h - 0.03, B.d * 0.85, B.x + sx * (B.w / 2 - 0.22), D.y + (B.h - 0.03) / 2, B.z, CEDAR_DARK, { grain: 1 });
+    // 崖邊欄杆：立在地面上，頂端與木台的欄杆同高，一路接到東西竹垣
+    L.CLIFF_RAILS.forEach((r) => {
+      const len = r.x1 - r.x0, xm = (r.x0 + r.x1) / 2;
+      wbox(dk, len, 0.07, 0.1, xm, top, D.z0, CEDAR_DARK);
+      for (const y of [D.y + 0.45, 0.32]) wbox(dk, len, 0.045, 0.05, xm, y, D.z0, CEDAR_DARK);
+      const n = Math.round(len / 1.6);
+      for (let i = 0; i <= n; i++) {
+        const x = r.x0 + (len * i) / n;
+        if (Math.abs(Math.abs(x) - D.x1) < 0.01) continue; // 木台轉角已經有柱
+        wbox(dk, 0.09, top + 0.2, 0.09, x, (top - 0.2) / 2, D.z0, CEDAR_DARK);
+      }
+    });
+
+    // 足湯：檜木槽，南側是坐板。水面、注水的水柱在 water.js
+    {
+      const y0 = D.y, w = A.x1 - A.x0, t = A.wall, tubD = A.seatZ0 - A.tubZ0, tubZ = (A.seatZ0 + A.tubZ0) / 2;
+      const ASHI = 0xc79a62; // 新一點、偏暖的檜木色
+      const H = { weather: 0.04 }, HP = { grain: 0, plank: 0.167, weather: 0.05 };
+      wbox(dk, w, 0.04, tubD, cx, y0 + A.floorY - 0.02, tubZ, ASHI, { grain: 0, plank: 0.14, weather: 0.04 });       // 槽底
+      wbox(dk, w + t * 2, A.h, t, cx, y0 + A.h / 2, A.tubZ0 - t / 2, ASHI, { grain: 0, plank: 0.2, plankY: true, weather: 0.04 }); // 外側板
+      wbox(dk, w, A.h, t, cx, y0 + A.h / 2, A.seatZ0 + t / 2, ASHI, { grain: 0, plank: 0.2, plankY: true, weather: 0.04 });      // 內側板（坐板下）
+      for (const sd of [-1, 1]) {
+        const x = sd * (w / 2 + t / 2);
+        wbox(dk, t, A.h, A.seatZ1 - A.tubZ0, x, y0 + A.h / 2, (A.seatZ1 + A.tubZ0) / 2, ASHI, { grain: 2, plank: 0.2, plankY: true, weather: 0.04 }); // 端板
+        wbox(dk, 0.12, 0.03, tubD + t, sd * (w / 2 + t / 2), y0 + A.h + 0.015, tubZ - t / 2, ASHI, H); // 端板上的笠木
+      }
+      wbox(dk, w + t * 2 + 0.06, 0.03, 0.12, cx, y0 + A.h + 0.015, A.tubZ0 - t / 2, ASHI, H);           // 外側的笠木
+      wbox(dk, w + t * 2 + 0.04, 0.045, A.seatZ1 - A.seatZ0 + 0.07, cx, y0 + A.h + 0.0225, (A.seatZ0 + A.seatZ1) / 2 - 0.035, ASHI, HP); // 坐板
+      wbox(dk, w + t * 2, A.h, 0.03, cx, y0 + A.h / 2, A.seatZ1 - 0.045, ASHI, { grain: 0, plank: 0.2, plankY: true, weather: 0.04 }); // 坐板下的前板
+      for (let x = A.x0; x <= A.x1 + 0.01; x += 1.25) wbox(dk, 0.05, A.h, 0.025, x, y0 + A.h / 2, A.seatZ1 - 0.02, CEDAR_DARK);
+      // 注水的竹筒：東端一支竹柱，橫出一節細竹
+      const S = A.spout, bam = wood(0x9a8a4e, 1, 0, 0.2);
+      const px = A.x1 + t + 0.14;
+      cyl(world, 0.045, 0.048, S.y - y0 + 0.2, px, y0 + (S.y - y0 + 0.2) / 2, S.z, bam, 14);
+      const pipe = cyl(world, 0.024, 0.026, px - S.x + 0.12, (px + S.x) / 2 + 0.04, S.y + 0.035, S.z, bam, 12);
+      pipe.rotation.z = Math.PI / 2 - 0.1;
     }
-    wbox(world, B.w - 0.5, 0.05, 0.06, B.x, D.y + 0.16, B.z, CEDAR_DARK);
+  }
+
+  // ---------- 西翼：躺椅的低木台（躺椅與小几在 props.js） ----------
+  {
+    const P = L.LOUNGE, w = P.x1 - P.x0, d = P.z1 - P.z0, cx = (P.x0 + P.x1) / 2, cz = (P.z0 + P.z1) / 2;
+    wbox(dk, w, 0.04, d, cx, P.y - 0.02, cz, DECK_WOOD, { grain: 2, plank: 0.13, weather: 0.55 });
+    for (const z of [P.z0 + 0.025, P.z1 - 0.025]) wbox(dk, w, P.y - 0.04, 0.05, cx, (P.y - 0.04) / 2, z, CEDAR);
+    for (const x of [P.x0 + 0.025, P.x1 - 0.025]) wbox(dk, 0.05, P.y - 0.04, d - 0.1, x, (P.y - 0.04) / 2, cz, CEDAR);
+  }
+  bake(world, dk);
+
+  // ---------- 東翼：壺湯預定地（下一段才做，先用一圈石緣示意範圍） ----------
+  {
+    const T = L.TSUBO;
+    const ring = mesh(world, new THREE.TorusGeometry(T.r, 0.11, 10, 64), M.stone, T.x, 0.04, T.z);
+    ring.rotation.x = Math.PI / 2;
+    ring.scale.z = 0.85;
   }
 
   // ---------- 竹垣 ----------

@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as L from './layout.js';
-import { MATERIALS as M, wood, rockGeometry, rng, fbm } from './world.js';
+import { MATERIALS as M, wood, rockGeometry, rng, fbm, OVERHEAD } from './world.js';
 
 const std = (o = {}) => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, ...o });
 const V2 = (pts) => pts.map(([r, y]) => new THREE.Vector2(r, y));
@@ -402,8 +402,102 @@ export function createProps(world) {
     world.add(milk);
   }
 
+  // ---------- 躺椅與小几（西翼） ----------
+  // 局部座標：椅身沿 z，腳在 -z、頭在 +z。三段：腿托、座面、靠背，各自兩根側框加橫條，上面鋪一張薄墊
+  const chair = new THREE.Group();
+  const LG = L.LOUNGE;
+  {
+    const b = new Batch(), hw = 0.29;
+    const FRAME = wood(0xa88458, 2, 0, 0.15), SLAT = wood(0xb08a5c, 0, 0, 0.12), LEG = wood(0xa88458, 1, 0, 0.15);
+    const mat = std({ color: 0xd9cfba, roughness: 1 }), pillow = std({ color: 0x2c3f63, roughness: 1 });
+    const pts = [[-0.95, 0.25], [-0.3, 0.36], [0.2, 0.3], [0.94, 0.73]]; // [z, y]：腳端、膝、腰、頭端
+    for (let i = 0; i < 3; i++) {
+      const [z0, y0] = pts[i], [z1, y1] = pts[i + 1];
+      const len = Math.hypot(z1 - z0, y1 - y0), a = Math.atan2(y1 - y0, z1 - z0), zc = (z0 + z1) / 2, yc = (y0 + y1) / 2;
+      const dy = Math.sin(a), dz = Math.cos(a), ny = Math.cos(a), nz = -Math.sin(a);
+      for (const sx of [-1, 1]) b.box(FRAME, 0.04, 0.065, len + 0.03, sx * hw, yc, zc, -a);
+      const n = Math.round(len / 0.095);
+      for (let k = 0; k < n; k++) {
+        const s = ((k + 0.5) / n - 0.5) * len;
+        b.box(SLAT, hw * 2 + 0.04, 0.018, 0.07, 0, yc + dy * s + ny * 0.041, zc + dz * s + nz * 0.041, -a);
+      }
+      b.box(mat, hw * 2 - 0.06, 0.04, len - 0.03, 0, yc + ny * 0.07, zc + nz * 0.07, -a);
+    }
+    // 枕：靠背上端一個藍染的小圓枕
+    b.add(pillow, new THREE.CylinderGeometry(0.065, 0.065, 0.36, 16), at(0, 0.73, 0.69, 0, 0, Math.PI / 2));
+    // 腳：前腳、腰下的腳、撐住靠背的後腳，左右各一；腰下一根橫撐
+    for (const sx of [-1, 1]) {
+      b.box(LEG, 0.045, 0.27, 0.05, sx * hw, 0.135, -0.78);
+      b.box(LEG, 0.045, 0.3, 0.05, sx * hw, 0.15, 0.2);
+      b.box(LEG, 0.045, 0.56, 0.05, sx * hw, 0.28, 0.7);
+      b.box(FRAME, 0.04, 0.045, 0.5, sx * hw, 0.12, 0.45);
+      // 扶手
+      b.box(LEG, 0.04, 0.22, 0.04, sx * (hw + 0.045), 0.44, -0.12);
+      b.box(FRAME, 0.07, 0.025, 0.66, sx * (hw + 0.045), 0.56, 0.16);
+      b.box(LEG, 0.04, 0.12, 0.04, sx * (hw + 0.045), 0.5, 0.44);
+    }
+    b.box(SLAT, hw * 2, 0.045, 0.04, 0, 0.12, 0.2);
+    b.box(SLAT, hw * 2, 0.045, 0.04, 0, 0.12, 0.7);
+    b.build(chair);
+    chair.position.set(LG.chair.x, LG.y, LG.chair.z);
+    chair.rotation.y = LG.chair.rot;
+    world.add(chair);
+
+    // 小几：圓几上一只漆盆，放著鐵壺與茶杯
+    const table = new THREE.Group(), tb = new Batch(), th = 0.44;
+    const lacquer = std({ color: 0x3a1512, roughness: 0.35 }), iron = std({ color: 0x1c1b1a, roughness: 0.55, metalness: 0.4 });
+    const cup = std({ color: 0x8a9684, roughness: 0.4 }), tea = std({ color: 0x6f7a2a, roughness: 0.15 });
+    tb.add(HINOKI_X, new THREE.CylinderGeometry(0.21, 0.21, 0.028, 32), at(0, th - 0.014, 0));
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + 0.5;
+      tb.add(HINOKI, new THREE.CylinderGeometry(0.016, 0.02, th - 0.02, 10), at(Math.cos(a) * 0.14, (th - 0.03) / 2, Math.sin(a) * 0.14, Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12));
+    }
+    tb.add(HINOKI_X, new THREE.TorusGeometry(0.12, 0.009, 6, 24), at(0, 0.16, 0, Math.PI / 2));
+    tb.add(lacquer, lathe([[0, th], [0.15, th], [0.158, th + 0.014], [0.15, th + 0.016], [0.145, th + 0.008], [0, th + 0.008]], 32));
+    // 鐵壺
+    tb.add(iron, lathe([[0, 0], [0.04, 0], [0.058, 0.02], [0.062, 0.045], [0.05, 0.07], [0.03, 0.078], [0.03, 0.084], [0.012, 0.088], [0.012, 0.1], [0, 0.102]], 20), at(-0.04, th + 0.008, -0.03));
+    tb.add(iron, new THREE.CylinderGeometry(0.007, 0.011, 0.05, 8), at(-0.04 + 0.068, th + 0.06, -0.03, 0, 0, -0.9));
+    tb.add(iron, new THREE.TorusGeometry(0.045, 0.004, 6, 20, Math.PI), at(-0.04, th + 0.078, -0.03, 0, Math.PI / 2, 0));
+    // 茶杯與茶
+    tb.add(cup, lathe([[0, 0], [0.022, 0], [0.03, 0.012], [0.034, 0.055], [0.03, 0.055], [0.027, 0.014], [0, 0.01]], 20), at(0.07, th + 0.008, 0.05));
+    tb.add(tea, new THREE.CircleGeometry(0.029, 20), at(0.07, th + 0.008 + 0.044, 0.05, -Math.PI / 2));
+    tb.build(table);
+    table.position.set(LG.table.x, LG.y, LG.table.z);
+    table.rotation.y = 0.4;
+    world.add(table);
+
+    // 野点傘：朱紅的大和傘，深色竹柄插在木座上
+    const para = new THREE.Group(), pb = new Batch(), PR = LG.parasol.r, rimY = 2.02, apexY = 2.34, N = 28;
+    const paper = std({ color: 0xb3261c, roughness: 0.75, side: THREE.DoubleSide });
+    const dark = std({ color: 0x1d1512, roughness: 0.6 });
+    const cg = new THREE.ConeGeometry(PR, apexY - rimY, N, 1, true).toNonIndexed();
+    cg.computeVertexNormals();
+    const canopy = new THREE.Mesh(cg, paper);
+    canopy.position.y = (rimY + apexY) / 2;
+    canopy.castShadow = canopy.receiveShadow = true;
+    para.add(canopy);
+    const slope = Math.atan2(apexY - rimY, PR), sl = Math.hypot(PR, apexY - rimY);
+    for (let k = 0; k < N; k++) {
+      const a = (k / N) * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+      // 親骨（貼著傘面內側）與小骨（從柄上的轆轤撐到親骨中段）
+      pb.add(dark, new THREE.BoxGeometry(sl, 0.008, 0.008), at(c * PR / 2, (rimY + apexY) / 2 - 0.012, sn * PR / 2, 0, -a, -slope));
+      const mx = PR * 0.52, my = apexY - (apexY - rimY) * 0.52 - 0.02, hubY = 1.84;
+      pb.add(dark, new THREE.BoxGeometry(Math.hypot(mx - 0.03, my - hubY), 0.006, 0.006), at(c * (mx + 0.03) / 2, (my + hubY) / 2, sn * (mx + 0.03) / 2, 0, -a, Math.atan2(my - hubY, mx - 0.03)));
+    }
+    pb.add(dark, new THREE.CylinderGeometry(0.019, 0.022, apexY + 0.04, 12), at(0, (apexY + 0.04) / 2, 0));
+    pb.add(dark, new THREE.CylinderGeometry(0.04, 0.04, 0.05, 14), at(0, 1.84, 0));
+    pb.add(dark, new THREE.ConeGeometry(0.05, 0.07, 14), at(0, apexY + 0.03, 0));
+    pb.box(DARKWOOD, 0.3, 0.07, 0.3, 0, 0.035, 0);
+    pb.box(DARKWOOD, 0.12, 0.12, 0.12, 0, 0.1, 0);
+    pb.build(para);
+    para.position.set(LG.parasol.x, LG.y, LG.parasol.z);
+    world.add(para);
+    OVERHEAD.push(canopy);
+  }
+
   return {
     lanterns,
+    lounge: { group: chair },
     oke: { group: oke, water: oke.userData.water },
     stool,
     shishi: { group: shishi, pivot, rest: REST, spout: shishi.userData.spout },

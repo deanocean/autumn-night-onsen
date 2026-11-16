@@ -1,6 +1,6 @@
 // 互動：不顯示準星，靠「視線 + 距離」決定目前注視的物件，被注視的物件自身微微發亮，按 E 觸發。
 // 注視時畫面下方浮出一行小字提示；H 叫出操作說明。各互動的聲音交給 audio.js。
-// 內容：點燈熄燈（全熄後星空變亮）、木桶舀水、坐下觀星、搖落紅葉、湯上牛奶、泡湯；鹿威し自動循環。
+// 內容：點燈熄燈（全熄後星空變亮）、木桶舀水、足湯、躺椅、搖落紅葉、湯上牛奶、泡湯；鹿威し自動循環。
 import * as THREE from 'three';
 import * as L from './layout.js';
 import { G } from './env.js';
@@ -33,7 +33,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
   const done = new Set(); // 做過的互動種類（目前只是紀錄；提示改成每次都顯示）
   let gaze = null;
   let busy = false;       // 喝牛奶這類不能被打斷的動作
-  let mode = null;        // 'soak' 泡湯中、'bench' 坐著觀星
+  let mode = null;        // 'soak' 泡湯中、'ashiyu' 泡足湯、'chair' 躺在躺椅上
   let look = null;        // 坐下時把視線帶往某個方向
   let flashText = '', flashT = 0;
   const rnd = Math.random;
@@ -208,38 +208,71 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     });
   }
 
-  // ---------- 坐下觀星 ----------
+  // ---------- 坐與躺（足湯、躺椅） ----------
+  // 共通：把人帶到定點、降低視線、把視線帶往某個方向（之後可自由轉頭）；夜裡流星變多。起身時回到原本站的地方。
+  let seatLeave = null, footT = 0;
+  function sit(id, o) {
+    mode = id;
+    const back = { x: player.pos.x, z: player.pos.z, release: true };
+    player.anchor = { x: o.x, z: o.z };
+    player.eyeTarget = o.eye;
+    look = { yaw: o.yaw, pitch: o.pitch, t: 0, dur: 2.6 };
+    sky.meteor.rate = 3;
+    sky.meteor.wait = Math.min(sky.meteor.wait, 2.5);
+    document.body.classList.add('quiet');
+    flash('<kbd>E</kbd>起身', 3.5);
+    seatLeave = () => {
+      player.anchor = back;
+      sky.meteor.rate = 1;
+      document.body.classList.remove('quiet');
+      if (o.leave) o.leave();
+    };
+  }
+  const ghost = (w, h, d, x, y, z, ry = 0) => { // 只借幾何與位置給發亮的殼
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d));
+    m.position.set(x, y, z); m.rotation.y = ry; m.visible = false;
+    scene.add(m);
+    return m;
+  };
+
+  // 足湯：坐在坐板上，腳泡進槽裡，面向海灣
   {
-    const B = L.BENCH, D = L.DECK;
-    const seat = new THREE.Mesh(new THREE.BoxGeometry(B.w + 0.006, 0.061, B.d + 0.006));
-    seat.position.set(B.x, D.y + B.h, B.z);
-    scene.add(seat);
-    seat.visible = false; // 只借它的幾何與位置給發亮的殼
-    const glow = shell([seat]);
-    const hw = B.w / 2 - 0.3;
-    let back = null;
+    const A = L.ASHIYU, D = L.DECK, F = water.foot;
+    const seatY = D.y + A.h + 0.045, zc = (A.seatZ0 + A.seatZ1) / 2 - 0.035, hw = (A.x1 - A.x0) / 2 - 0.35;
+    const glow = shell([ghost(A.x1 - A.x0 + A.wall * 2 + 0.046, 0.051, A.seatZ1 - A.seatZ0 + 0.076, 0, seatY - 0.0225, zc)]);
+    const clampX = (x) => Math.max(-hw, Math.min(hw, x));
+    const feet = (k) => { // 兩腳入水、出水的漣漪
+      const x = player.anchor ? player.anchor.x : player.pos.x;
+      for (const sx of [-0.11, 0.11]) F.addRipple(x + sx, A.seatZ0 - 0.2, k);
+    };
     targets.push({
-      id: 'bench', type: 'bench',
-      pos: (cam) => V(Math.max(B.x - hw, Math.min(B.x + hw, cam.x)), D.y + B.h, B.z),
-      r: 0.42,
-      label: () => (G.night.value > 0.5 ? '坐下觀星' : '坐下'),
+      id: 'ashiyu', type: 'ashiyu',
+      pos: (cam) => V(clampX(cam.x), seatY, zc),
+      r: 0.5,
+      label: () => '坐下泡腳',
       glow,
       act() {
-        mode = 'bench';
-        back = { x: player.pos.x, z: player.pos.z, release: true };
-        player.anchor = { x: Math.max(B.x - hw, Math.min(B.x + hw, player.pos.x)), z: B.z - 0.04 };
-        player.eyeTarget = B.h + 0.76;
-        // 面向山谷；夜裡仰頭看銀河
-        look = { yaw: 0, pitch: G.night.value > 0.5 ? 0.6 : 0.1, t: 0, dur: 2.6 };
-        sky.meteor.rate = 3;
-        sky.meteor.wait = Math.min(sky.meteor.wait, 2.5);
-        document.body.classList.add('quiet');
-        flash('<kbd>E</kbd>起身', 3.5);
+        // 泡腳賞景：視線平平地望向海灣（夜裡略為抬高，看得到星空與對岸的燈火）
+        sit('ashiyu', { x: clampX(player.pos.x), z: zc + 0.08, eye: A.h + 0.045 + 0.76, yaw: 0, pitch: G.night.value > 0.75 ? 0.16 : -0.02, leave() { feet(0.8); audio.foot(false, { x: player.pos.x, y: F.y, z: A.seatZ0 - 0.2 }); } });
+        setTimeout(() => { if (mode === 'ashiyu') { feet(1.2); audio.foot(true, { x: player.pos.x, y: F.y, z: A.seatZ0 - 0.2 }); } }, 650);
+        footT = 4;
       },
-      leave() {
-        player.anchor = back;
-        sky.meteor.rate = 1;
-        document.body.classList.remove('quiet');
+    });
+  }
+
+  // 躺椅：躺下仰望；夜裡看星空，白天與黃昏角度低一些看海灣
+  {
+    const c = L.LOUNGE.chair, sn = Math.sin(c.rot), cs = Math.cos(c.rot);
+    const glow = shell(props.lounge.group.children.filter((m) => m.isMesh));
+    targets.push({
+      id: 'chair', type: 'chair',
+      pos: V(c.x, L.LOUNGE.y + 0.5, c.z), r: 0.6, reach: 2.8,
+      label: () => (G.night.value > 0.75 ? '躺下看星星' : '躺下'),
+      glow,
+      act() {
+        // 頭的位置：靠背上段（局部 z = 0.66）
+        sit('chair', { x: c.x + sn * 0.66, z: c.z + cs * 0.66, eye: 0.84, yaw: c.rot, pitch: G.night.value > 0.75 ? 0.85 : 0.2 });
+        audio.chair(V(c.x, 0.5, c.z));
       },
     });
   }
@@ -499,7 +532,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     flash('<kbd>E</kbd>起身', 3.5);
   }
   function stand() {
-    if (mode === 'bench') targets.find((t) => t.id === 'bench').leave();
+    if (seatLeave) { seatLeave(); seatLeave = null; }
     if (mode === 'soak') { water.addRipple(player.pos.x, player.pos.z, 1.8); audio.soak(false); }
     player.frozen = false;
     player.eyeTarget = null;
@@ -555,7 +588,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       if (gaze) act(gaze);
       else if (canSoak()) { done.add('soak'); soak(); }
     },
-    // 測試用：不靠視線直接觸發（'oke'、'bench'、'leaf'、'milk0'、'lamp3'、'soak'、'stand'）
+    // 測試用：不靠視線直接觸發（'oke'、'ashiyu'、'chair'、'leaf'、'milk0'、'lamp3'、'soak'、'stand'）
     trigger(id) {
       if (id === 'stand') return stand();
       if (id === 'soak') return soak();
@@ -583,6 +616,11 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       }
 
       for (let i = anims.length - 1; i >= 0; i--) if (!anims[i](dt)) anims.splice(i, 1);
+      // 泡足湯時腳偶爾動一下
+      if (mode === 'ashiyu' && (footT -= dt) < 0) {
+        footT = 2.5 + rnd() * 4;
+        water.foot.addRipple(player.pos.x + (rnd() < 0.5 ? -0.11 : 0.11), L.ASHIYU.seatZ0 - 0.2, 0.5 + rnd() * 0.4);
+      }
       leaves.update(dt);
       shishi.update(dt);
       drops.update(dt);

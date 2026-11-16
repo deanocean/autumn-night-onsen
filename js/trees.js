@@ -607,6 +607,7 @@ function fallenLeaves(scene, world, trees, map, rand) {
     // 落葉比樹上的乾：偏褐、偏暗；水邊與水面的被打濕，顏色更深
     gradColor(hue + (rand() - 0.5) * 2.6, col).lerp(brown, rand() * rand() * 0.9).multiplyScalar(0.5 + rand() * 0.45);
     if (water || L.poolT(x, z) < 1.15) col.multiplyScalar(0.72);
+    if (L.noLeaf(x, z)) return; // 足湯、躺椅上不撒（放在最後才判斷，前面的亂數順序不變）
     const s = roof ? sets.roof : sets.ground;
     s.m.push(...m.elements); s.c.push(col.r, col.g, col.b);
   }

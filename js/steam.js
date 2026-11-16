@@ -1,13 +1,14 @@
 // 蒸氣：許多永遠面向鏡頭的柔軟「煙團」。
 // 每一團的位置完全由時間與自己的亂數算出（不需要逐格更新），從水面升起、變大、淡出，再回到水面重來。
 import * as THREE from 'three';
-import { POOL, poolPoint, poolT, YUGUCHI } from './layout.js';
+import { POOL, poolPoint, poolT, YUGUCHI, ASHIYU, DECK } from './layout.js';
 import { GLSL_NOISE } from './shaders.js';
 import { G } from './env.js';
 
 const vert = /* glsl */ `
 attribute vec4 aSeed;   // x, z, 相位, 大小
 attribute vec3 aKind;   // 上升高度, 速度, 濃度
+attribute float aY;     // 水面高度
 uniform float uTime;
 uniform vec2 uWind;
 uniform vec4 uLampPos[16];
@@ -15,7 +16,7 @@ varying vec2 vUv; varying float vAlpha; varying float vPhase; varying float vGlo
 void main(){
   float life = fract(uTime * aKind.y + aSeed.z);
   float rise = life * aKind.x;
-  vec3 c = vec3(aSeed.x, ${POOL.waterY.toFixed(3)} + 0.1 + rise, aSeed.y);
+  vec3 c = vec3(aSeed.x, aY + 0.1 + rise, aSeed.y);
   // 越高越被風帶走，並左右搖擺
   c.xz += uWind * rise * rise * 0.35;
   c.x += sin(uTime * 0.35 + aSeed.z * 31.0 + rise) * 0.25 * life;
@@ -51,10 +52,11 @@ void main(){
 export function createSteam(scene) {
   let s = 987654321;
   const rand = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
-  const seeds = [], kinds = [];
-  const add = (x, z, size, height, speed, dens) => {
+  const seeds = [], kinds = [], ys = [];
+  const add = (x, z, size, height, speed, dens, y = POOL.waterY) => {
     seeds.push(x, z, rand(), size);
     kinds.push(height, speed, dens);
+    ys.push(y);
   };
   // 池面各處升起的蒸氣
   for (let i = 0; i < 150; i++) {
@@ -70,12 +72,18 @@ export function createSteam(scene) {
   for (let i = 0; i < 34; i++) {
     add(YUGUCHI.x - 0.4 + (rand() - 0.5) * 1.6, YUGUCHI.z + (rand() - 0.5) * 1.8, 0.6 + rand() * 0.7, 2.4 + rand() * 1.6, 0.08 + rand() * 0.06, 0.45 + rand() * 0.3);
   }
+  // 足湯：水面小，只有幾縷薄薄的
+  for (let i = 0; i < 26; i++) {
+    const x = ASHIYU.x0 + 0.2 + rand() * (ASHIYU.x1 - ASHIYU.x0 - 0.4), z = ASHIYU.tubZ0 + 0.15 + rand() * (ASHIYU.seatZ0 - ASHIYU.tubZ0 - 0.3);
+    add(x, z, 0.4 + rand() * 0.4, 0.7 + rand() * 0.8, 0.06 + rand() * 0.05, 0.2 + rand() * 0.15, DECK.y + ASHIYU.waterY - 0.05);
+  }
   const count = seeds.length / 4;
   const geo = new THREE.InstancedBufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
   geo.setIndex([0, 1, 2, 0, 2, 3]);
   geo.setAttribute('aSeed', new THREE.InstancedBufferAttribute(new Float32Array(seeds), 4));
   geo.setAttribute('aKind', new THREE.InstancedBufferAttribute(new Float32Array(kinds), 3));
+  geo.setAttribute('aY', new THREE.InstancedBufferAttribute(new Float32Array(ys), 1));
   geo.instanceCount = count;
   const material = new THREE.ShaderMaterial({
     uniforms: {
