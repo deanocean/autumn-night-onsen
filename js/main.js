@@ -9,6 +9,7 @@ import { createVista, slopeTreeSpots } from './vista.js';
 import { createLights } from './lights.js';
 import { createDayNight } from './daynight.js';
 import { createGuides } from './labels.js';
+import { createViews } from './views.js';
 import { Player } from './player.js';
 import { createInteract } from './interact.js';
 import { createAudio } from './audio.js';
@@ -67,6 +68,7 @@ const lights = createLights(scene, props.lanterns, lamps);
 const dayNight = createDayNight({ scene, renderer, sun, hemi, sky, lights });
 const guides = createGuides(scene);
 const player = new Player(camera, canvas);
+const views = createViews({ camera, player, guides });
 const audio = createAudio({ camera, player });
 const interact = createInteract({ scene, world, camera, player, props, lights, trees, water, sky, guides, audio });
 
@@ -119,6 +121,14 @@ document.addEventListener('pointerlockchange', () => {
 addEventListener('keydown', (e) => {
   if (!player.enabled || e.repeat) return;
   if (e.code === 'KeyT') toggleTime();
+  // 觀景點：V 下一個；觀景中按移動鍵回到原位，其他的鍵（除了 T、N、H）先不理
+  if (e.code === 'KeyV' && !guides.top && !interact.mode && !player.anchor) views.next();
+  if (views.active) {
+    if (/^(Key[WASD]|Arrow)/.test(e.code)) views.exit();
+    if (e.code === 'KeyN') toggleSound();
+    if (e.code === 'KeyH' || e.code === 'Escape') interact.key(e.code);
+    return;
+  }
   if (e.code === 'KeyM') guides.toggleTop();
   if (e.code === 'KeyL') guides.toggleLabels();
   if (e.code === 'KeyN') toggleSound();
@@ -154,6 +164,7 @@ function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   G.uTime.value += dt;
   player.update(dt);
+  views.update(dt);
   if (player.wading) water.wade(player.pos.x, player.pos.z, Math.hypot(player.vel.x, player.vel.y));
   water.update(dt);
   dayNight.update(dt);
@@ -167,7 +178,7 @@ function frame() {
 }
 
 // 供自動檢查使用
-window.__onsen = { player, scene, camera, renderer, G, dayNight, guides, lights, sky, vista, trees, props, water, interact, audio, ready: false };
+window.__onsen = { player, views, scene, camera, renderer, G, dayNight, guides, lights, sky, vista, trees, props, water, interact, audio, ready: false };
 
 startBtn.disabled = true;
 startBtn.textContent = '準備中…';

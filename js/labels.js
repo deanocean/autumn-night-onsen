@@ -55,6 +55,8 @@ export function createGuides(scene) {
   return {
     labels, topCam,
     get top() { return top; },
+    viewing: false, // 觀景點鏡頭中（views.js 設定）
+    get away() { return top || this.viewing; }, // 相機不在玩家眼睛的位置：不做注視判定與互動
     toggleTop() { setTop(!top); },
     setTop,
     toggleLabels() { labels.visible = !labels.visible; },

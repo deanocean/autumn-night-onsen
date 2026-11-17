@@ -236,3 +236,42 @@ body.quiet #time, body.quiet #sound, body.quiet #helpbtn { opacity: 0; pointer-e
 @media (prefers-reduced-motion: reduce) {
   .panel, #start { transition: none; }
 }
+
+/* 觀景點（V）：下方一行說明，切換時整個畫面淡到黑再淡回來 */
+#viewcap {
+  position: fixed;
+  left: 50%;
+  bottom: 7%;
+  transform: translateX(-50%);
+  font-size: 1rem;
+  letter-spacing: 0.3em;
+  white-space: nowrap;
+  color: var(--ink);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 0.7);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+  z-index: 5;
+}
+#viewcap.show { opacity: 0.92; }
+#viewcap span { margin: 0 1.6em; font-size: 0.78rem; letter-spacing: 0.18em; color: var(--ink-dim); }
+#viewcap kbd {
+  display: inline-block;
+  margin-right: 0.6em;
+  padding: 0.1em 0.5em;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0;
+  border: 1px solid rgba(243, 236, 224, 0.45);
+  border-radius: 3px;
+}
+#fade {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: 4;
+}
+#fade.on { opacity: 1; }

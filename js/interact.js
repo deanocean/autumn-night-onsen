@@ -574,7 +574,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
 
   const dir = V(), rel = V();
   function findGaze() {
-    if (guides.top || busy || mode || player.anchor || !player.enabled) return null;
+    if (guides.away || busy || mode || player.anchor || !player.enabled) return null;
     camera.getWorldDirection(dir);
     let best = null, score = 1;
     for (const t of targets) {
@@ -601,7 +601,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     key(code) {
       if (code === 'KeyH') { helpEl.hidden = !helpEl.hidden; return; }
       if (code === 'Escape') { helpEl.hidden = true; return; }
-      if (guides.top) return;
+      if (guides.away) return;
       const move = /^(Key[WASD]|Arrow)/.test(code);
       if (mode && (code === 'KeyE' || move)) { if (!busy) stand(); return; }
       if (code !== 'KeyE' || busy) return;
@@ -665,7 +665,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       let hint = '';
       if (flashT > 0) hint = flashText;
       else if (gaze) hint = `<kbd>E</kbd>${gaze.label()}`;
-      else if (!gaze && !mode && !busy && canSoak() && !guides.top) hint = '<kbd>E</kbd>泡湯';
+      else if (!gaze && !mode && !busy && canSoak() && !guides.away) hint = '<kbd>E</kbd>泡湯';
       setHint(hint);
     },
   };

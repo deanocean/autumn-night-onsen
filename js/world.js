@@ -266,22 +266,42 @@ function underside(parent, pts, color) {
   wbox(tmp, Math.max(...e) - Math.min(...e), 0.1, 0.045, (Math.max(...e) + Math.min(...e)) / 2, -0.14, vmax - 0.03, color);
   bake(s, tmp);
 }
-// 鬼瓦：雲形的輪廓（面向 +z，底邊中央在原點）
+// 鬼瓦：蓋住棟的端面的一片山形瓦板（直線的輪廓，下端兩角有往外翹的鰭），邊緣一圈凸框、中央一個圓紋；
+// 頂上橫一支圓筒（鳥衾），接著棟上的丸瓦往前伸出一點。
+// 面向 +z，底邊中央在原點，背面在 z = 0（貼著棟的端面）；s = 1 時高 0.42
 function oniGeo(s = 1) {
-  const sh = new THREE.Shape();
-  const half = [[-0.3, 0], [-0.42, 0.06, -0.36, 0.17], [-0.3, 0.25, -0.22, 0.2], [-0.31, 0.34, -0.2, 0.42], [-0.12, 0.47, -0.085, 0.4], [-0.07, 0.56, 0, 0.66]];
-  sh.moveTo(...half[0]);
-  for (let i = 1; i < half.length; i++) sh.quadraticCurveTo(...half[i]);
-  for (let i = half.length - 1; i >= 1; i--) sh.quadraticCurveTo(-half[i][0], half[i][1], -(half[i - 1][2] ?? half[i - 1][0]), half[i - 1][3] ?? half[i - 1][1]);
-  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.1, bevelEnabled: true, bevelSize: 0.015, bevelThickness: 0.015, bevelSegments: 1 });
-  const boss = new THREE.SphereGeometry(0.11, 12, 8).scale(1, 1, 0.6).translate(0, 0.25, 0.11);
-  return mergeGeometries([g, boss.toNonIndexed()]).translate(0, 0, -0.05).scale(s, s, s);
+  const outline = (k, fin) => {
+    const sh = new THREE.Shape();
+    const pts = fin
+      ? [[0.3, 0], [0.4, 0.005], [0.44, 0.085], [0.37, 0.06], [0.3, 0.1], [0.27, 0.24], [0, 0.42]]
+      : [[0.3, 0], [0.27, 0.24], [0, 0.42]];
+    sh.moveTo(-pts[0][0] * k, 0);
+    for (const q of pts) sh.lineTo(q[0] * k, q[1] * k);
+    for (let i = pts.length - 2; i >= 1; i--) sh.lineTo(-pts[i][0] * k, pts[i][1] * k);
+    sh.closePath();
+    return sh;
+  };
+  const plate = new THREE.ExtrudeGeometry(outline(1, true), { depth: 0.06, bevelEnabled: false });
+  const rim = outline(1, false);
+  rim.holes.push(outline(0.78, false).getPoints().map((q) => new THREE.Vector2(q.x, q.y + 0.04)).reduce((path, q, i) => (i ? path.lineTo(q.x, q.y) : path.moveTo(q.x, q.y), path), new THREE.Path()));
+  const frame = new THREE.ExtrudeGeometry(rim, { depth: 0.025, bevelEnabled: false }).translate(0, 0, 0.06);
+  const crest = new THREE.CylinderGeometry(0.07, 0.07, 0.02, 20).rotateX(Math.PI / 2).translate(0, 0.17, 0.07);
+  const roll = new THREE.CylinderGeometry(0.052, 0.052, 0.22, 14).rotateX(Math.PI / 2).translate(0, 0.44, 0.04);
+  return mergeGeometries([plate, frame, crest, roll].map((g) => g.toNonIndexed())).scale(s, s, s);
 }
 // 懸魚：破風頂點垂下的木雕（面向 +z，頂端在原點）
-function gegyoGeo(s = 1) {
+function gegyoGeo(s = 1, fins = false) {
   const g = new THREE.Shape();
   g.moveTo(0, 0.12); g.lineTo(0.13, 0.02); g.quadraticCurveTo(0.2, -0.16, 0, -0.34); g.quadraticCurveTo(-0.2, -0.16, -0.13, 0.02); g.closePath();
-  return new THREE.ExtrudeGeometry(g, { depth: 0.04, bevelEnabled: false }).translate(0, -0.12, 0).scale(s, s, 1);
+  const parts = [new THREE.ExtrudeGeometry(g, { depth: 0.04, bevelEnabled: false })];
+  // 鰭：兩旁往外伸的捲葉（唐破風的兎毛通用）
+  if (fins) for (const k of [-1, 1]) {
+    const f = new THREE.Shape();
+    f.moveTo(k * 0.1, 0.06); f.quadraticCurveTo(k * 0.34, 0.12, k * 0.56, -0.04); f.quadraticCurveTo(k * 0.6, -0.1, k * 0.52, -0.12);
+    f.quadraticCurveTo(k * 0.34, -0.02, k * 0.13, -0.1); f.closePath();
+    parts.push(new THREE.ExtrudeGeometry(f, { depth: 0.03, bevelEnabled: false }));
+  }
+  return mergeGeometries(parts.map((q) => q.toNonIndexed())).translate(0, -0.12, 0).scale(s, s, 1);
 }
 // 蟇股：蛙腳形的木雕（面向 ±z，底邊中央在原點，w 寬、h 高），上面頂一個斗，挖空處有一朵雕花
 function kaerumataGeo(w, h) {
@@ -670,7 +690,7 @@ export function buildWorld(scene) {
       for (let i = 0; i < n; i++) rc.add(M.tile, rodGeo(P3(doorX + pts[i][0], pts[i][1] + 0.02, z0 + 0.05), P3(doorX + pts[i + 1][0], pts[i + 1][1] + 0.02, z0 + 0.05), 0.06));
       rc.add(M.tile, barGeo(P3(doorX, y0 + KH + 0.08, z0 - 0.02), P3(doorX, y0 + KH + 0.08, z1), 0.2, 0.2));
       rc.add(M.tile, rodGeo(P3(doorX, y0 + KH + 0.19, z0 - 0.04), P3(doorX, y0 + KH + 0.19, z1), 0.075));
-      rc.add(M.tile, oniGeo(0.72), faceM('n', doorX, z0 - 0.1).setPosition(doorX, y0 + KH + 0.02, z0 - 0.1));
+      rc.add(M.tile, oniGeo(0.8), faceM('n', doorX, 0).setPosition(doorX, y0 + KH - 0.04, z0 - 0.02));
       // 破風板（跟著弧線的厚板）、弧下的板壁、背面的封板
       const band = (drop0, drop1) => {
         const s = new THREE.Shape();
@@ -680,12 +700,12 @@ export function buildWorld(scene) {
         return s;
       };
       rc.add(wood(CEDAR_DARK, 0), new THREE.ExtrudeGeometry(band(0.03, 0.3), { depth: 0.07, bevelEnabled: false }), faceM('n', doorX, z0 - 0.02));
-      rc.add(wood(CEDAR, 0, 0.16, 0.5, true), new THREE.ShapeGeometry(band(0.1, null)), faceM('n', doorX, z0 + 0.07));
+      rc.add(M.plaster, new THREE.ShapeGeometry(band(0.1, null)), faceM('n', doorX, z0 + 0.07)); // 弧下是白壁，襯出深色的木雕
       rc.add(M.dark, new THREE.ShapeGeometry(band(0.02, null)), new THREE.Matrix4().makeTranslation(doorX, 0, z1));
       rc.add(wood(CEDAR_DARK, 0), boxGeo(HW * 2 - 0.3, 0.22, 0.17, doorX, y0 - 0.16, z0 + 0.0)); // 虹樑
-      rc.add(DARK1, gegyoGeo(0.8), faceM('n', doorX, z0 - 0.12).setPosition(doorX, y0 + KH - 0.06, z0 - 0.12)); // 兎毛通（從破風板的頂點垂下）
+      rc.add(DARK1, gegyoGeo(0.82, true), faceM('n', doorX, 0).setPosition(doorX, y0 + KH - 0.06, z0 - 0.09)); // 兎毛通（從破風板的頂點垂下，兩旁有鰭）
       // 蟇股：坐在虹樑正中央，兩腳往外張開，中間挖空處有一朵雕花
-      rc.add(wood(0x8e6a48, 0), kaerumataGeo(0.9, 0.32), new THREE.Matrix4().makeTranslation(doorX, y0 - 0.05, z0));
+      rc.add(wood(CEDAR_DARK, 0), kaerumataGeo(1.5, 0.4), new THREE.Matrix4().makeTranslation(doorX, y0 - 0.05, z0 + 0.03));
       // 入口兩側的提燈
       for (const sd of [-1, 1]) {
         const x = doorX + sd * 0.98, y = 2.28, z = 8.75;
@@ -720,8 +740,8 @@ export function buildWorld(scene) {
       }
       rc.add(M.tile, barGeo(P3(xh, yH + 0.06, zF + HIP), P3(xh, yH + 0.06, zB - HIP), 0.2, 0.16));
       // 大棟兩端的鬼瓦
-      const xo = dir === 'w' ? G0 - 0.06 : G1 + 0.06;
-      rc.add(M.tile, oniGeo(1.15), faceM(dir, xo, zc).setPosition(xo, ridgeY + 0.04, zc));
+      const xo = dir === 'w' ? G0 : G1;
+      rc.add(M.tile, oniGeo(1.25), faceM(dir, xo, zc).setPosition(xo, ridgeY - 0.08, zc));
     }
     rc.add(M.tile, barGeo(P3(G0, ridgeY + 0.13, zc), P3(G1, ridgeY + 0.13, zc), 0.3, 0.34)); // 大棟
     rc.add(M.tile, rodGeo(P3(G0 - 0.04, ridgeY + 0.31, zc), P3(G1 + 0.04, ridgeY + 0.31, zc), 0.1, 10));
@@ -740,10 +760,10 @@ export function buildWorld(scene) {
       }
       rc.add(M.tile, barGeo(P3(doorX, ya + 0.08, zf - ov - 0.02), P3(doorX, ya + 0.08, zEnd), 0.22, 0.2));
       rc.add(M.tile, rodGeo(P3(doorX, ya + 0.2, zf - ov - 0.04), P3(doorX, ya + 0.2, zEnd), 0.08));
-      rc.add(M.tile, oniGeo(oni), faceM('n', doorX, 0).setPosition(doorX, ya + 0.02, zf - ov - 0.1));
+      rc.add(M.tile, oniGeo(oni), faceM('n', doorX, 0).setPosition(doorX, ya - 0.04, zf - ov - 0.02));
       gableFace(rc, faceM('n', doorX, zf), { yb, ya, q, over: ov - 0.08, grain: 0 });
     };
-    chidori(1.3, zF + 0.15, 0.55, 0.7);
+    chidori(1.3, zF + 0.15, 0.55, 0.8);
     chidori(2.3, zF + 1.1, 0.55, 0.9);
 
     // --- 塔樓（仿振鷺閣）：往下張開的板壁、一圈紅玻璃窗、銅板的寶形屋頂，頂上一隻白鷺 ---
