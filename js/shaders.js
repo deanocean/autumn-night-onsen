@@ -1,7 +1,7 @@
 // 表面材質：在 Three.js 標準材質上「打補丁」，光照與陰影仍沿用內建計算。
 // 近看的細節來自 textures/ 裡的實拍 PBR 貼圖（Poly Haven，CC0），以三向投影貼上，不需要 UV；
 // 「哪裡長苔、哪裡濕、哪裡風化、木板接縫」這類分布仍由程序雜訊決定，疊在貼圖上。
-// 屋頂（ROOF 杮葺、KAWARA 本瓦）、竹垣（BAMBOO）、池底（BASIN）維持純程序做法。
+// 屋頂（ROOF 杮葺、KAWARA 本瓦、ROKUSHO 緑青銅板）、竹垣（BAMBOO）、池底（BASIN）維持純程序做法。
 import * as THREE from 'three';
 import { POOL } from './layout.js';
 import { G } from './env.js';
@@ -219,6 +219,30 @@ const MODES = {
       c = mix(c, mix(vec3(0.60, 0.10, 0.04), vec3(0.85, 0.48, 0.08), fract(v.z * 31.0)), leaf);
       r = mix(0.42, 0.62, k.z);
     }`,
+  ROKUSHO: /* glsl */ `
+    // 長了緑青的銅板一文字葺：橫長的銅板一排排往上疊，上下排錯開。op.x 沿簷口、op.z 沿屋面往下（頂點屬性 aTile）
+    // 回傳 (在這一排裡由上到下 0..1, 離左右接縫的距離（公尺）, 該片的亂數)
+    vec3 sheet(vec3 op){
+      float row = op.z / 0.24, ri = floor(row);
+      float col = op.x / 0.62 + 0.5 * mod(ri, 2.0) + hash21(vec2(ri, 9.0)) * 0.2, fc = fract(col);
+      return vec3(fract(row), min(fc, 1.0 - fc) * 0.62, hash21(vec2(floor(col), ri)));
+    }
+    float surfH(vec3 wp, vec3 op){
+      vec3 s = sheet(op);
+      return s.x * 0.007 + rs(0.014, 0.0, s.y) * 0.004; // 每排的下緣壓在下一排上，左右是咬合的縫
+    }
+    void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
+      vec3 s = sheet(op);
+      float a = fbm(wp * vec3(1.6, 0.8, 1.6) + 3.0);
+      c = mix(ROKUSHO_A, ROKUSHO_B, 0.35 * s.z + 0.65 * a);
+      // 雨水沖出的淡色條痕（沿屋面往下）
+      c = mix(c, ROKUSHO_B * 1.35, rs(0.5, 0.8, fbm2(vec3(op.x * 5.0, op.z * 0.5, 2.0))) * 0.4);
+      // 還沒長滿緑青的地方露出暗褐的銅
+      c = mix(c, vec3(0.085, 0.06, 0.04), rs(0.5, 0.72, fbm(wp * 2.3 + 12.0)) * 0.5);
+      // 接縫裡的積垢
+      c *= 1.0 - 0.4 * rs(0.12, 0.0, s.x) - 0.3 * rs(0.014, 0.0, s.y);
+      r = 0.7;
+    }`,
   BARK: /* glsl */ `
     // 樹皮：灰褐色、縱向的淺溝，朝上的面長苔，零星的地衣
     float surfH(vec3 wp, vec3 op){ return fbm2(wp * vec3(24.0, 3.0, 24.0)) * 0.006; }
@@ -291,7 +315,8 @@ const TEX_USE = {
   PLASTER: { slot: 'plaster', nstr: 0.7 },
   BARK: { slot: 'rock', nstr: 1.1 },
 };
-const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25', KAWARA_COL: 'vec3(0.105, 0.115, 0.135)' };
+const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25', KAWARA_COL: 'vec3(0.105, 0.115, 0.135)',
+  ROKUSHO_A: 'vec3(0.10, 0.25, 0.20)', ROKUSHO_B: 'vec3(0.21, 0.41, 0.33)' }; // 緑青的深淺兩色
 
 const loader = new THREE.TextureLoader();
 // 每張貼圖一個 Promise（載入失敗也算結束）；main.js 的暖機會等它們全部到齊
