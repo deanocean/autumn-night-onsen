@@ -1,7 +1,7 @@
 // 表面材質：在 Three.js 標準材質上「打補丁」，光照與陰影仍沿用內建計算。
 // 近看的細節來自 textures/ 裡的實拍 PBR 貼圖（Poly Haven，CC0），以三向投影貼上，不需要 UV；
 // 「哪裡長苔、哪裡濕、哪裡風化、木板接縫」這類分布仍由程序雜訊決定，疊在貼圖上。
-// 屋頂（ROOF）、竹垣（BAMBOO）、池底（BASIN）維持純程序做法。
+// 屋頂（ROOF 杮葺、KAWARA 本瓦）、竹垣（BAMBOO）、池底（BASIN）維持純程序做法。
 import * as THREE from 'three';
 import { POOL } from './layout.js';
 import { G } from './env.js';
@@ -187,6 +187,38 @@ const MODES = {
       c = mix(c, mix(vec3(0.60, 0.10, 0.04), vec3(0.85, 0.48, 0.08), fract(v.z * 31.0)), leaf);
       r = 0.95;
     }`,
+  KAWARA: /* glsl */ `
+    // 本瓦葺：平瓦與丸瓦一列隔一列。op.x 沿簷口方向、op.z 沿屋面往下（由頂點屬性 aTile 提供，見 world.js 的 tilePlane）
+    const float KP = 0.27;  // 列距（公尺；world.js 的軒丸瓦用同一個數字）
+    const float KR = 0.2;   // 丸瓦的半寬（相對於列距）
+    // 回傳 (高度, 是否丸瓦, 該片的亂數, 平瓦上離丸瓦邊緣的距離 0..1)
+    vec4 kawara(vec3 op){
+      float col = op.x / KP, ci = floor(col), fx = abs(fract(col) - 0.5);
+      float isR = step(fx, KR);
+      float row = op.z / 0.3 + isR * 0.5 + hash21(vec2(ci, 5.0)) * 0.3;
+      float fr = fract(row), id = hash21(vec2(ci + isR * 37.0, floor(row)));
+      float t = clamp((fx - KR) / (0.5 - KR), 0.0, 1.0);
+      float hr = 0.03 + 0.05 * sqrt(max(0.0, 1.0 - fx * fx / (KR * KR))) - 0.006 * (1.0 - rs(0.0, 0.07, min(fr, 1.0 - fr)));
+      float hf = -0.016 * sin(t * 1.5708) + 0.012 * fr + id * 0.003;
+      return vec4(mix(hf, hr, isR), isR, id, t);
+    }
+    float surfH(vec3 wp, vec3 op){ return kawara(op).x; }
+    void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
+      vec4 k = kawara(op);
+      c = KAWARA_COL * (0.78 + 0.5 * k.z);
+      // 丸瓦頂上受光，平瓦靠丸瓦的兩側在陰影裡（遠看凹凸淡掉後，條紋靠這個撐住）
+      c *= mix(mix(0.5, 1.0, rs(0.0, 0.6, k.w)), 1.15, k.y);
+      // 日曬雨淋的深淺、燻銀泛白的斑
+      c *= 0.8 + 0.45 * fbm(wp * vec3(0.7, 1.4, 0.7) + 4.0);
+      c = mix(c, vec3(0.30, 0.31, 0.32), rs(0.62, 0.8, fbm2(wp * 3.1 + 9.0)) * 0.35);
+      float moss = rs(0.58, 0.75, fbm(wp * 0.9 + 1.0)) * (1.0 - k.y);
+      c = mix(c, vec3(0.13, 0.17, 0.08), moss * 0.35);
+      // 落在瓦溝裡的紅葉
+      vec3 v = voro(wp.xz * 5.0 + 2.0);
+      float leaf = step(v.z, 0.12) * rs(0.3, 0.22, v.x) * step(0.0, n.y) * (1.0 - k.y);
+      c = mix(c, mix(vec3(0.60, 0.10, 0.04), vec3(0.85, 0.48, 0.08), fract(v.z * 31.0)), leaf);
+      r = mix(0.42, 0.62, k.z);
+    }`,
   BARK: /* glsl */ `
     // 樹皮：灰褐色、縱向的淺溝，朝上的面長苔，零星的地衣
     float surfH(vec3 wp, vec3 op){ return fbm2(wp * vec3(24.0, 3.0, 24.0)) * 0.006; }
@@ -259,7 +291,7 @@ const TEX_USE = {
   PLASTER: { slot: 'plaster', nstr: 0.7 },
   BARK: { slot: 'rock', nstr: 1.1 },
 };
-const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25' };
+const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25', KAWARA_COL: 'vec3(0.105, 0.115, 0.135)' };
 
 const loader = new THREE.TextureLoader();
 // 每張貼圖一個 Promise（載入失敗也算結束）；main.js 的暖機會等它們全部到齊
@@ -380,13 +412,13 @@ export function patch(material, mode, defines = {}) {
     const VARY = 'varying vec3 vWPos; varying vec3 vOPos; varying vec3 vWN; varying vec3 vON; varying mat3 vM3; varying float vSeed;';
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>
-        ${VARY}`)
+        ${VARY}${defs.TILE_ATTR ? '\nattribute vec3 aTile;' : ''}`)
       .replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
         vWN = inverseTransformDirection(transformedNormal, viewMatrix);
         vON = objectNormal;
         vM3 = mat3(modelMatrix);`)
       .replace('#include <project_vertex>', `#include <project_vertex>
-        vOPos = transformed;
+        vOPos = ${defs.TILE_ATTR ? 'aTile' : 'transformed'};
         vWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
         vSeed = dot(modelMatrix[3].xyz, vec3(1.31, 2.17, 3.73));`);
     shader.fragmentShader = shader.fragmentShader

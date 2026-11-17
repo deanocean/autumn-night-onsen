@@ -134,7 +134,8 @@ AZUMAYA_POSTS.forEach(([x, z]) => circles.push({ x, z, r: 0.14 }));
 
 // 湯屋牆、簷廊柱
 boxes.push({ x0: YUYA.x0, x1: YUYA.x1, z0: YUYA.z0 - 0.15, z1: YUYA.z1 });
-export const ENGAWA_POSTS = [-10.6, -7, -3.4, 0.2, 2.6].map((x) => [x, ENGAWA.z0 + 0.25]);
+// 入口（x = -4.94）兩旁的兩根對稱，上面架著唐破風
+export const ENGAWA_POSTS = [-10.6, -6.74, -3.14, 0.2, 2.6].map((x) => [x, ENGAWA.z0 + 0.25]);
 ENGAWA_POSTS.forEach(([x, z]) => circles.push({ x, z, r: 0.12 }));
 
 // 望景台欄杆與足湯；崖邊欄杆
@@ -235,7 +236,7 @@ export function zoneAt(x, z) {
 
 export const LABELS = [
   ['湯屋簷廊（起點）', -7.5, 2.4, 9.6],
-  ['入口・千鳥破風', -4.94, 4.6, 8.2],
+  ['入口・唐破風', -4.94, 4.6, 8.2],
   ['石板小徑', -5.6, 1.6, 6],
   ['半露天區', -6.8, 4.3, -1],
   ['主池', 0.5, 2.4, -2.6],
