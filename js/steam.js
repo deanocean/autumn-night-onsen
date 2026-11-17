@@ -1,9 +1,9 @@
 // 蒸氣：許多永遠面向鏡頭的柔軟「煙團」。
 // 每一團的位置完全由時間與自己的亂數算出（不需要逐格更新），從水面升起、變大、淡出，再回到水面重來。
 import * as THREE from 'three';
-import { POOL, poolPoint, poolT, YUGUCHI, ASHIYU, DECK } from './layout.js';
+import { POOL, poolPoint, poolT, YUGUCHI, ASHIYU, DECK, TSUBO } from './layout.js';
 import { GLSL_NOISE } from './shaders.js';
-import { G } from './env.js';
+import { G, LAMP_N } from './env.js';
 
 const vert = /* glsl */ `
 attribute vec4 aSeed;   // x, z, 相位, 大小
@@ -11,7 +11,7 @@ attribute vec3 aKind;   // 上升高度, 速度, 濃度
 attribute float aY;     // 水面高度
 uniform float uTime;
 uniform vec2 uWind;
-uniform vec4 uLampPos[16];
+uniform vec4 uLampPos[${LAMP_N}];
 varying vec2 vUv; varying float vAlpha; varying float vPhase; varying float vGlow;
 void main(){
   float life = fract(uTime * aKind.y + aSeed.z);
@@ -23,7 +23,7 @@ void main(){
   c.z += cos(uTime * 0.28 + aSeed.z * 17.0 + rise * 0.7) * 0.25 * life;
   float size = aSeed.w * (0.55 + life * 1.5);
   float glow = 0.0;
-  for (int i = 0; i < 16; i++) { vec3 dl = uLampPos[i].xyz - c; glow += uLampPos[i].w / (1.0 + dot(dl, dl) * 0.3); }
+  for (int i = 0; i < ${LAMP_N}; i++) { vec3 dl = uLampPos[i].xyz - c; glow += uLampPos[i].w / (1.0 + dot(dl, dl) * 0.3); }
   vGlow = glow;
   vec4 mv = viewMatrix * vec4(c, 1.0);
   mv.xy += position.xy * size;
@@ -76,6 +76,15 @@ export function createSteam(scene) {
   for (let i = 0; i < 26; i++) {
     const x = ASHIYU.x0 + 0.2 + rand() * (ASHIYU.x1 - ASHIYU.x0 - 0.4), z = ASHIYU.tubZ0 + 0.15 + rand() * (ASHIYU.seatZ0 - ASHIYU.tubZ0 - 0.3);
     add(x, z, 0.4 + rand() * 0.4, 0.7 + rand() * 0.8, 0.06 + rand() * 0.05, 0.2 + rand() * 0.15, DECK.y + ASHIYU.waterY - 0.05);
+  }
+  // 壺湯：壺口一柱較濃的湯氣，淺池上貼著幾縷薄的
+  for (let i = 0; i < 20; i++) {
+    const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * 0.55;
+    add(TSUBO.x + Math.cos(a) * r, TSUBO.z + Math.sin(a) * r, 0.5 + rand() * 0.5, 1.3 + rand() * 1.3, 0.06 + rand() * 0.05, 0.3 + rand() * 0.2, TSUBO.pot.waterY - 0.05);
+  }
+  for (let i = 0; i < 12; i++) {
+    const a = rand() * Math.PI * 2, r = 0.9 + rand() * 0.95;
+    add(TSUBO.x + Math.cos(a) * r, TSUBO.z + Math.sin(a) * r, 0.5 + rand() * 0.5, 0.4 + rand() * 0.5, 0.04 + rand() * 0.04, 0.16 + rand() * 0.12, TSUBO.waterY - 0.05);
   }
   const count = seeds.length / 4;
   const geo = new THREE.InstancedBufferGeometry();

@@ -181,6 +181,54 @@ function textTexture(text, { bg, fg, size = 150, w = 256, h = 256, font = '600',
   return t;
 }
 
+// 飴釉：深褐的底，口緣一圈琥珀色的釉往下流成長短不一的條痕（u 繞壺身、v 由底到口）
+function glazeTexture(rand) {
+  const c = document.createElement('canvas'), w = (c.width = 2048), h = (c.height = 1024);
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, '#6a3513'); g.addColorStop(0.1, '#4a220d'); g.addColorStop(0.45, '#33150a'); g.addColorStop(1, '#221009');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  // 窯變的濃淡：大塊的明暗
+  for (let i = 0; i < 60; i++) {
+    const x = rand() * w, y = rand() * h, r = 60 + rand() * 200;
+    const rg = ctx.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, rand() < 0.5 ? `rgba(120,62,22,${0.1 + rand() * 0.16})` : `rgba(14,6,3,${0.12 + rand() * 0.2})`);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg;
+    for (const ox of [-w, 0, w]) ctx.fillRect(x - r + ox, y - r, r * 2, r * 2);
+  }
+  // 流釉：從口緣往下
+  for (let i = 0; i < 80; i++) {
+    const x = rand() * w, bw = 5 + rand() * rand() * 40, len = h * (0.08 + rand() * rand() * 0.7);
+    const dg = ctx.createLinearGradient(0, 0, 0, len);
+    const a = 0.2 + rand() * 0.45, warm = rand();
+    dg.addColorStop(0, `rgba(${200 + warm * 30 | 0},${128 + warm * 40 | 0},${46 + warm * 30 | 0},${a})`);
+    dg.addColorStop(0.7, `rgba(168,96,34,${a * 0.6})`);
+    dg.addColorStop(1, 'rgba(150,80,28,0)');
+    ctx.fillStyle = dg;
+    for (const ox of [-w, 0, w]) {
+      ctx.beginPath();
+      ctx.moveTo(x + ox - bw / 2, 0); ctx.lineTo(x + ox + bw / 2, 0);
+      ctx.quadraticCurveTo(x + ox + bw * 0.4, len * 0.8, x + ox, len);
+      ctx.quadraticCurveTo(x + ox - bw * 0.4, len * 0.8, x + ox - bw / 2, 0);
+      ctx.fill();
+    }
+  }
+  // 口緣：釉最厚、顏色最淺的一圈；細小的鐵斑
+  const rg = ctx.createLinearGradient(0, 0, 0, 70);
+  rg.addColorStop(0, 'rgba(205,150,70,0.85)'); rg.addColorStop(1, 'rgba(190,120,50,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, w, 70);
+  for (let i = 0; i < 2600; i++) {
+    ctx.fillStyle = rand() < 0.7 ? `rgba(16,7,3,${0.15 + rand() * 0.35})` : `rgba(225,170,90,${0.08 + rand() * 0.2})`;
+    ctx.beginPath(); ctx.arc(rand() * w, rand() * h, 0.6 + rand() * 2.2, 0, 6.283); ctx.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  return t;
+}
+
 export function buildWorld(scene) {
   // 窗紙：與燈籠共用的 M.paper 分開。日間 map 是單純的和紙；夜裡的影絵畫在各窗自己的 emissiveMap（見 shoji.js）。
   const ST = shojiTextures(fbm, rng);
@@ -258,7 +306,7 @@ export function buildWorld(scene) {
     else rock(world, rand, x, z, 0.26 + rand() * 0.26, 0.2 + rand() * 0.26, -0.1, 18);
   }
   // 池畔散置的景石
-  for (const [x, z, r, h] of [[-10.2, 1.4, 0.55, 0.5], [7.4, 6.6, 0.7, 0.6], [11.6, 1.2, 0.8, 0.75], [-6.6, -7.4, 0.6, 0.45], [4.6, -7.0, 0.5, 0.4], [-11.8, 8.6, 0.65, 0.5], [12.4, -9.4, 0.9, 0.8]]) {
+  for (const [x, z, r, h] of [[-10.2, 1.4, 0.55, 0.5], [7.4, 6.6, 0.7, 0.6], [11.6, 1.2, 0.8, 0.75], [-6.6, -7.4, 0.6, 0.45], [4.6, -7.0, 0.5, 0.4], [-11.8, 8.6, 0.65, 0.5], [12.8, -10.9, 0.9, 0.8]]) {
     rock(world, rand, x, z, r, h, -0.12, 22);
   }
 
@@ -568,12 +616,40 @@ export function buildWorld(scene) {
   }
   bake(world, dk);
 
-  // ---------- 東翼：壺湯預定地（下一段才做，先用一圈石緣示意範圍） ----------
+  // ---------- 東翼：壺湯 ----------
+  // 圓形淺池（深色石板底、低矮的花崗石緣）中央一顆飴釉陶壺，壺後立竹筒湯口；水面、溢流、水柱在 water.js
   {
-    const T = L.TSUBO;
-    const ring = mesh(world, new THREE.TorusGeometry(T.r, 0.11, 10, 64), M.stone, T.x, 0.04, T.z);
-    ring.rotation.x = Math.PI / 2;
-    ring.scale.z = 0.85;
+    const T = L.TSUBO, P = T.pot, g = new THREE.Group();
+    // 旋轉體的輪廓要「外側由下往上、頂面由外往內、內側由上往下」，法線才會朝外
+    const lat = (pts, seg) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg);
+    const SLATE = patch(std({ color: 0x505855 }), 'STONE');
+    mesh(g, new THREE.CylinderGeometry(T.r + 0.02, T.r + 0.02, T.floorY, 72), SLATE, T.x, T.floorY / 2, T.z);
+    const R0 = T.r, R1 = T.r + T.rimW, H = T.rimH, c = 0.02;
+    mesh(g, lat([[R1, -0.03], [R1, H - c], [R1 - c, H], [R0 + c, H], [R0, H - c], [R0, 0]], 96), M.stone, T.x, 0, T.z);
+    // 六角踏石：進出壺時踩的台階
+    T.steps.forEach(([x, z, r, h], i) => {
+      const hg = new THREE.CylinderGeometry(r, r * 1.03, h, 6).toNonIndexed();
+      hg.computeVertexNormals();
+      mesh(g, hg, M.stone, x, T.floorY + h / 2, z).rotation.y = 0.35 + i * 0.5;
+    });
+    bake(world, g);
+
+    // 陶壺：外側貼飴釉的貼圖（v 照高度重算），內側是素面的深褐釉
+    const og = lat(L.potProfile(), 80), uv = og.attributes.uv, op = og.attributes.position;
+    for (let i = 0; i < uv.count; i++) uv.setY(i, Math.min(1, op.getY(i) / P.h));
+    const glaze = std({ map: glazeTexture(rng(20261117)), color: 0xbcaea4, roughness: 0.2 });
+    const pot = mesh(world, og, glaze, T.x, T.floorY, T.z);
+    pot.name = 'tsubo-pot';
+    const sy = P.seatY - T.floorY;
+    const ig = lat([[P.inner + 0.03, P.h + 0.004], [P.inner, P.h - 0.03], [P.inner - 0.01, 0.5], [P.inner - 0.07, 0.3], [P.inner - 0.2, sy], [0, sy]], 64);
+    mesh(world, ig, std({ color: 0x55290f, roughness: 0.3, side: THREE.DoubleSide }), T.x, T.floorY, T.z, false);
+
+    // 竹筒湯口：立在淺池裡的竹柱，橫出一節竹管伸到壺口上方
+    const S = T.spout, bam = wood(0x9a8a4e, 1, 0, 0.2);
+    cyl(world, 0.05, 0.054, S.postH, S.postX, T.floorY + S.postH / 2, T.z, bam, 16);
+    const len = S.postX - S.tip.x + 0.14, rise = 0.09;
+    const pipe = cyl(world, 0.03, 0.033, len, (S.postX + S.tip.x) / 2 + 0.05, S.tip.y + 0.03 + rise / 2, T.z, bam, 14);
+    pipe.rotation.z = Math.PI / 2 + Math.atan2(rise, len);
   }
 
   // ---------- 竹垣 ----------

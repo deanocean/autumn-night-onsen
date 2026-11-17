@@ -215,10 +215,34 @@ export function createProps(world) {
     return { group: g, mat, paper, glowY: 0.33 };
   }
 
+  // ---------- 足元灯 ----------
+  // 觀星處用的矮燈：寬大的鐵笠把往上的光全遮住，底下細木格子圍著和紙燈筒，光只落在腳邊
+  function ashimoto() {
+    const g = new THREE.Group(), b = new Batch();
+    const iron = std({ color: 0x1b1917, roughness: 0.5, metalness: 0.55 });
+    b.add(M.stone, lathe([[0, 0], [0.085, 0], [0.085, 0.022], [0.07, 0.034], [0, 0.034]], 28));
+    b.add(iron, new THREE.CylinderGeometry(0.058, 0.058, 0.012, 28), at(0, 0.04, 0));
+    const n = 14, rr = 0.054;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      b.box(DARKWOOD, 0.007, 0.215, 0.011, Math.sin(a) * rr, 0.152, Math.cos(a) * rr, 0, a, 0);
+    }
+    b.add(iron, new THREE.TorusGeometry(rr, 0.004, 6, 28), at(0, 0.2, 0, Math.PI / 2));
+    // 笠：淺淺的圓錐，簷口略厚；頂上一個小鈕
+    b.add(iron, lathe([[0, 0.262], [0.15, 0.262], [0.154, 0.268], [0.15, 0.276], [0.03, 0.31], [0.012, 0.316], [0.012, 0.335], [0, 0.338]], 36));
+    b.build(g);
+    const mat = paperMat();
+    const paper = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.21, 24, 1, true), mat);
+    paper.position.y = 0.152;
+    paper.receiveShadow = true;
+    g.add(paper);
+    return { group: g, mat, paper, glowY: 0.13 };
+  }
+
   const lanterns = L.LANTERNS.map(([x, z, kind]) => {
     const y0 = L.groundY(x, z);
-    const o = kind === 'stone' ? stoneLantern() : andon();
-    const s = kind === 'stone' ? 0.9 : 1;
+    const o = kind === 'stone' ? stoneLantern() : kind === 'andon' ? andon() : ashimoto();
+    const s = kind === 'stone' ? 0.9 : kind === 'ashimoto' ? 1.25 : 1;
     o.group.scale.setScalar(s);
     if (kind === 'stone') {
       // 石燈籠久立土中：略微下沉、微微歪斜，每座朝向不同

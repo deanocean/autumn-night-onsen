@@ -1,6 +1,6 @@
 // 互動：不顯示準星，靠「視線 + 距離」決定目前注視的物件，被注視的物件自身微微發亮，按 E 觸發。
 // 注視時畫面下方浮出一行小字提示；H 叫出操作說明。各互動的聲音交給 audio.js。
-// 內容：點燈熄燈（全熄後星空變亮）、木桶舀水、足湯、躺椅、搖落紅葉、湯上牛奶、泡湯；鹿威し自動循環。
+// 內容：點燈熄燈（全熄後星空變亮）、木桶舀水、足湯、躺椅、壺湯、搖落紅葉、湯上牛奶、泡湯；鹿威し自動循環。
 import * as THREE from 'three';
 import * as L from './layout.js';
 import { G } from './env.js';
@@ -33,7 +33,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
   const done = new Set(); // 做過的互動種類（目前只是紀錄；提示改成每次都顯示）
   let gaze = null;
   let busy = false;       // 喝牛奶這類不能被打斷的動作
-  let mode = null;        // 'soak' 泡湯中、'ashiyu' 泡足湯、'chair' 躺在躺椅上
+  let mode = null;        // 'soak' 泡湯中、'ashiyu' 泡足湯、'chair' 躺在躺椅上、'tsubo' 泡在壺湯裡
   let look = null;        // 坐下時把視線帶往某個方向
   let flashText = '', flashT = 0;
   const rnd = Math.random;
@@ -110,7 +110,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     targets.push({
       id: 'lamp' + i, type: 'lamp',
       pos: lamp.paper.getWorldPosition(V()),
-      r: lamp.kind === 'stone' ? 0.36 : 0.28, reach: high ? 3.2 : REACH,
+      r: lamp.kind === 'stone' ? 0.36 : lamp.kind === 'ashimoto' ? 0.22 : 0.28, reach: high ? 3.2 : REACH,
       label: () => (lamp.on ? '熄燈' : '點燈'),
       act() { lamp.on = !lamp.on; audio.lamp(this.pos, lamp.on); },
       glow(v) { lamp.hl = v; },
@@ -210,7 +210,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
 
   // ---------- 坐與躺（足湯、躺椅） ----------
   // 共通：把人帶到定點、降低視線、把視線帶往某個方向（之後可自由轉頭）；夜裡流星變多。起身時回到原本站的地方。
-  let seatLeave = null, footT = 0;
+  let seatLeave = null, footT = 0, pondT = 0;
   function sit(id, o) {
     mode = id;
     const back = { x: player.pos.x, z: player.pos.z, release: true };
@@ -273,6 +273,26 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
         // 頭的位置：靠背上段（局部 z = 0.66）
         sit('chair', { x: c.x + sn * 0.66, z: c.z + cs * 0.66, eye: 0.84, yaw: c.rot, pitch: G.night.value > 0.75 ? 0.85 : 0.2 });
         audio.chair(V(c.x, 0.5, c.z));
+      },
+    });
+  }
+
+  // 壺湯：坐進陶壺裡，背靠南側的壺壁、面向海灣；水滿出壺緣
+  {
+    const T = L.TSUBO, P = T.pot, W = water.tsubo;
+    const glow = shell([world.getObjectByName('tsubo-pot')]);
+    const at = { x: T.x, y: P.waterY, z: T.z };
+    targets.push({
+      id: 'tsubo', type: 'tsubo',
+      pos: V(T.x, P.waterY, T.z), r: 0.8, reach: 3.0,
+      label: () => '入壺湯',
+      glow,
+      act() {
+        sit('tsubo', {
+          x: T.x, z: T.z + 0.2, eye: P.waterY + 0.36 - T.floorY, yaw: 0, pitch: G.night.value > 0.75 ? 0.14 : -0.03,
+          leave() { W.pot.add(T.x, T.z + 0.2, 1.4); W.surge(0.5); audio.tsubo(false, at); },
+        });
+        setTimeout(() => { if (mode === 'tsubo') { W.pot.add(T.x, T.z + 0.2, 1.6); W.surge(1); audio.tsubo(true, at); } }, 700);
       },
     });
   }
@@ -588,7 +608,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       if (gaze) act(gaze);
       else if (canSoak()) { done.add('soak'); soak(); }
     },
-    // 測試用：不靠視線直接觸發（'oke'、'ashiyu'、'chair'、'leaf'、'milk0'、'lamp3'、'soak'、'stand'）
+    // 測試用：不靠視線直接觸發（'oke'、'ashiyu'、'chair'、'tsubo'、'leaf'、'milk0'、'lamp3'、'soak'、'stand'）
     trigger(id) {
       if (id === 'stand') return stand();
       if (id === 'soak') return soak();
@@ -621,6 +641,16 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
         footT = 2.5 + rnd() * 4;
         water.foot.addRipple(player.pos.x + (rnd() < 0.5 ? -0.11 : 0.11), L.ASHIYU.seatZ0 - 0.2, 0.5 + rnd() * 0.4);
       }
+      // 壺湯：泡著的時候偶爾動一下；在淺池裡走動會踩出漣漪
+      if (mode === 'tsubo' && (footT -= dt) < 0) {
+        footT = 3 + rnd() * 4;
+        water.tsubo.pot.add(L.TSUBO.x + (rnd() - 0.5) * 0.5, L.TSUBO.z + 0.1 + rnd() * 0.3, 0.5 + rnd() * 0.4);
+      }
+      pondT -= dt;
+      if (!mode && pondT < 0 && L.tsuboAt(player.pos.x, player.pos.z) === 2 && Math.hypot(player.vel.x, player.vel.y) > 0.3) {
+        pondT = 0.4;
+        water.tsubo.pond.add(player.pos.x, player.pos.z, 1.2);
+      }
       leaves.update(dt);
       shishi.update(dt);
       drops.update(dt);
@@ -628,7 +658,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       // 夜裡燈全熄之後，眼睛慢慢適應黑暗：星空與銀河變亮
       const star = 1 + 1.1 * lights.dark * G.night.value;
       G.starBoost.value += (star - G.starBoost.value) * (1 - Math.exp(-dt * 0.45));
-      const steam = mode === 'soak' ? 1.7 : 1;
+      const steam = mode === 'soak' ? 1.7 : mode === 'tsubo' ? 1.4 : 1;
       G.steamBoost.value += (steam - G.steamBoost.value) * (1 - Math.exp(-dt * 1.2));
 
       flashT = Math.max(0, flashT - dt);

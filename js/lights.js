@@ -2,7 +2,7 @@
 // 真正會照亮場景的點光源只放在主要位置（數量越多越吃效能）；
 // 另外把所有燈的位置交給水面與蒸氣的 shader，讓它們自己算出被染亮的程度。
 import * as THREE from 'three';
-import { G } from './env.js';
+import { G, LAMP_N } from './env.js';
 
 // lanterns：props.js 的石燈籠與行燈；hangingLamps：world.js 的簷下吊燈籠與提燈。
 // 每盞燈有自己的和紙材質（mat）與 on 旗標；改 on 之後由 update() 讓該盞的光與紙面一起淡出或亮起
@@ -19,7 +19,8 @@ export function createLights(scene, lanterns, hangingLamps) {
     }
     lamps.push(lamp);
   };
-  lanterns.forEach((l) => add(l.x, l.y, l.z, l.kind === 'stone' ? 5.5 : 4.0, true, l.kind, l));
+  const POWER = { stone: 5.5, andon: 4.0, ashimoto: 1.5 };
+  lanterns.forEach((l) => add(l.x, l.y, l.z, POWER[l.kind], true, l.kind, l));
   // 簷廊：窗內透出的光，合併成兩盞較亮的光（不是可熄的燈具）
   add(-7.4, 2.0, 9.9, 9, true, 'engawa');
   add(-0.6, 2.0, 9.9, 9, true, 'engawa');
@@ -32,7 +33,7 @@ export function createLights(scene, lanterns, hangingLamps) {
       if (lamp.light) lamp.light.intensity = lamp.power * v;
       // 白天紙面留一點底亮（像透著天光）；夜裡熄掉的燈要全暗
       if (lamp.mat) lamp.mat.emissiveIntensity = 0.12 * (1 - level * (1 - lamp.k)) + v * 1.9 + lamp.hl * (0.3 + 0.6 * v);
-      if (i < 16) G.lampPos.value[i].set(lamp.x, lamp.y, lamp.z, lamp.power * v * 0.11);
+      if (i < LAMP_N) G.lampPos.value[i].set(lamp.x, lamp.y, lamp.z, lamp.power * v * 0.11);
     });
   }
   sync();

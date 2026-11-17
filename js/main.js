@@ -160,7 +160,7 @@ function frame() {
   interact.update(dt);
   sky.update(dt, camera);
   vista.update(dt);
-  audio.update(dt, interact.mode === 'soak');
+  audio.update(dt, interact.mode === 'soak' || interact.mode === 'tsubo');
   guides.update(player, camera);
   renderer.render(scene, guides.top ? guides.topCam : camera);
   requestAnimationFrame(frame);

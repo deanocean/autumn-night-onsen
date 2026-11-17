@@ -2,6 +2,9 @@
 // 各個 shader 直接引用這些 uniform 物件，第三階段的日夜切換只要改這裡的值。
 import * as THREE from 'three';
 
+// 交給水面、蒸氣、樹葉 shader 的燈具位置有幾格（GLSL 陣列長度要寫死；燈超過這個數就要調大）
+export const LAMP_N = 20;
+
 export const G = {
   uTime: { value: 0 },
   sunDir: { value: new THREE.Vector3(-0.5, 0.72, 0.48).normalize() },
@@ -18,7 +21,7 @@ export const G = {
   steamBoost: { value: 1 }, // 泡湯時蒸氣變濃的倍率
   house: { value: 1 },      // 湯屋窗內的燈光（燈全熄時跟著暗下來）
   // 燈具：xyz 為位置，w 為亮度；水面與蒸氣用它算出被燈光染亮的程度
-  lampPos: { value: Array.from({ length: 16 }, () => new THREE.Vector4(0, -99, 0, 0)) },
+  lampPos: { value: Array.from({ length: LAMP_N }, () => new THREE.Vector4(0, -99, 0, 0)) },
   lampCol: { value: new THREE.Color(1.0, 0.62, 0.3) },
   skyTop: { value: new THREE.Color(0x4f86c6) },
   skyHorizon: { value: new THREE.Color(0xd4dde6) },

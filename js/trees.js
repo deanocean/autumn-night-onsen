@@ -4,7 +4,7 @@
 // 葉片共用一份材質：頂點 shader 做微風搖曳，片段 shader 加上逆光透亮與夜晚燈火的暖色。
 import * as THREE from 'three';
 import * as L from './layout.js';
-import { G } from './env.js';
+import { G, LAMP_N } from './env.js';
 import { patch } from './shaders.js';
 import { OVERHEAD, MATERIALS, fbm, rng } from './world.js';
 
@@ -225,7 +225,7 @@ function inject(shader, uShake, lit) {
       transformedNormal = normalMatrix * transformedNormal;`);
   shader.fragmentShader = shader.fragmentShader
     .replace('#include <common>', `#include <common>
-      uniform float uNight; uniform vec3 uSunDir, uSunCol, uLampCol; uniform vec4 uLampPos[16];
+      uniform float uNight; uniform vec3 uSunDir, uSunCol, uLampCol; uniform vec4 uLampPos[${LAMP_N}];
       varying vec3 vFWPos; varying vec3 vFWN;`)
     .replace('#include <map_fragment>', `#include <map_fragment>
       // 遠處貼圖縮小後葉子會變細、樹冠變稀，補一點回來
@@ -240,7 +240,7 @@ function inject(shader, uShake, lit) {
         totalEmissiveRadiance += diffuseColor.rgb * uSunCol * tr * (1.0 - uNight) * (1.0 - uNight);
         // 夜晚：燈火穿過葉片的暖色
         float lamp = 0.0;
-        for (int i = 0; i < 16; i++) { vec3 d = uLampPos[i].xyz - vFWPos; lamp += uLampPos[i].w / (1.0 + dot(d, d) * 0.5); }
+        for (int i = 0; i < ${LAMP_N}; i++) { vec3 d = uLampPos[i].xyz - vFWPos; lamp += uLampPos[i].w / (1.0 + dot(d, d) * 0.5); }
         totalEmissiveRadiance += diffuseColor.rgb * uLampCol * lamp * 0.9;
       }`);
 }

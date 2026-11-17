@@ -17,6 +17,7 @@ const MIX = {
   stream: 1.5,     // 湯口（有方位，越近越大聲）
   soak: 0.42,      // 泡湯時貼在耳邊的水聲
   foot: 0.5,       // 足湯竹筒的細水聲（有方位，只在木台上聽得到）
+  tsubo: 0.7,      // 壺湯湯口的水聲（有方位，走近才聽得到）
   birds: 0.6,
   crickets: 0.3,
   wind: 0.26,
@@ -86,6 +87,12 @@ export function createAudio({ camera, player }) {
       const hp = ctx.createBiquadFilter();
       hp.type = 'highpass'; hp.frequency.value = 900;
       loopSource(name, 1.35, 31).connect(hp).connect(fg).connect(panner({ x: L.ASHIYU.spout.x, y: L.DECK.y + L.ASHIYU.waterY, z: L.ASHIYU.spout.z }, 1.0, 1.6));
+      // 壺湯的湯口：比足湯粗一點的水柱落進壺裡
+      const tg = ctx.createGain();
+      tg.gain.value = MIX.tsubo;
+      const thp = ctx.createBiquadFilter();
+      thp.type = 'highpass'; thp.frequency.value = 500;
+      loopSource(name, 1.15, 8).connect(thp).connect(tg).connect(panner({ x: L.TSUBO.spout.tip.x, y: L.TSUBO.pot.waterY, z: L.TSUBO.z }, 1.2, 1.5));
     } else {
       loopSource(name, 1, rnd() * LOOPS[name]).connect(g).connect(master);
     }
@@ -152,9 +159,13 @@ export function createAudio({ camera, player }) {
   function step(run) {
     const { x, z } = player.pos;
     const v = MIX.steps * (run ? 1.15 : 1) * (0.85 + rnd() * 0.3);
+    const ts = L.tsuboAt(x, z);
     if (player.wading) {
       slot('step_wade', { gain: v * 1.1, rate: 0.92 + rnd() * 0.16 });
-    } else if (L.groundY(x, z) > 0.1) {
+    } else if (ts === 2 && L.groundY(x, z) < 0.1) {
+      // 壺湯的淺池：水只到腳踝，輕輕的啪嗒聲
+      slot('step_wade', { gain: v * 0.5, rate: 1.3 + rnd() * 0.2 });
+    } else if (L.groundY(x, z) > 0.1 && !ts) {
       // 簷廊、沓脫石旁、望景台：木地板
       slot('step_wood', { gain: v * 0.9, rate: 0.9 + rnd() * 0.2 });
     } else {
@@ -271,6 +282,13 @@ export function createAudio({ camera, player }) {
     foot(entering, at) {
       if (!ctx) return;
       play('splash', { at, ref: 1.5, offset: 0.05, dur: 1.0, rate: entering ? 1.35 : 1.5, gain: entering ? 0.3 : 0.22, fade: 0.6 });
+    },
+    // 壺湯：坐進去時水嘩地滿出壺緣；起身時水位落下
+    tsubo(entering, at) {
+      if (!ctx) return;
+      play('splash', { rate: entering ? 0.8 : 0.95, gain: 0.5, fade: 0.9 });
+      if (entering) play('pour', { at, ref: 2, delay: 0.25, rate: 0.85, gain: 0.45, fade: 0.8 });
+      else play('pour', { delay: 0.5, offset: 0.9, dur: 1.0, rate: 1.25, gain: 0.2, fade: 0.6 });
     },
     // 躺椅：躺下時木頭輕輕一響
     chair(at) {

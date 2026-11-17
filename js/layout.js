@@ -47,8 +47,32 @@ export const LOUNGE = {
   table: { x: -8.3, z: -10.0 },
   parasol: { x: -7.8, z: -9.1, r: 0.92 }, // 野点傘：立在躺椅的右後方，不擋仰望的視野
 };
-// 東翼：壺湯的預定地（下一段才做；現在只有一圈石緣示意範圍）
-export const TSUBO = { x: 9.8, z: -9.5, r: 1.7 };
+// 東翼：壺湯。圓形淺水池（r 是水面半徑，外面一圈 rimW 寬、rimH 高的花崗石緣；floorY 池底、waterY 淺池水面），
+// 中央一顆陶壺（pot：r 外徑的一半、h 壺高、inner 壺口內半徑、waterY 壺裡的水面，高度都是離地）。
+export const TSUBO = {
+  x: 9.6, z: -9.6, r: 2.0, rimW: 0.24, rimH: 0.15, floorY: 0.03, waterY: 0.075,
+  pot: { r: 0.76, h: 0.75, inner: 0.69, waterY: 0.771, seatY: 0.2 },
+};
+// 陶壺外側的輪廓（[半徑, 高度]，高度從壺底算起）：底窄、腹鼓、口緣外翻。world.js 的壺身與 water.js 的溢流水膜共用
+export function potProfile(grow = 0) {
+  const P = TSUBO.pot, pts = [];
+  for (let i = 0; i <= 16; i++) {
+    const t = i / 16;
+    pts.push([0.6 + 0.16 * Math.pow(Math.sin(t * Math.PI * 0.62), 0.9) + grow, t * (P.h - 0.05)]);
+  }
+  pts.push([P.r + 0.012 + grow, P.h - 0.04], [P.r + 0.02 + grow, P.h - 0.018], [P.r + 0.008 + grow, P.h], [P.inner + 0.03, P.h + 0.004]);
+  return pts;
+}
+// 進壺湯的方向（從主池東側的飛石走來，西南偏南）與沿路的六角踏石：[x, z, 半徑, 高度]
+const TSUBO_IN = { x: -0.41, z: 0.91 };
+TSUBO.steps = [[1.14, 0.34, 0.3], [1.72, 0.3, 0.13]].map(([d, r, h]) => [TSUBO.x + TSUBO_IN.x * d, TSUBO.z + TSUBO_IN.z * d, r, h]);
+// 竹筒湯口：立在壺的正東，竹管伸到壺口上方（tip 是出水口）
+TSUBO.spout = { postX: TSUBO.x + TSUBO.pot.r + 0.2, postH: 1.22, tip: { x: TSUBO.x + 0.5, y: 1.0, z: TSUBO.z } };
+// 0 = 不在壺湯，1 = 石緣上，2 = 淺池裡
+export function tsuboAt(x, z) {
+  const d = Math.hypot(x - TSUBO.x, z - TSUBO.z);
+  return d < TSUBO.r ? 2 : d < TSUBO.r + TSUBO.rimW ? 1 : 0;
+}
 // 崖邊欄杆：木台兩側到東西竹垣（z 與木台正面的欄杆同一條線）
 export const CLIFF_RAILS = [{ x0: -14.2, x1: DECK.x0 }, { x0: DECK.x1, x1: 14.2 }];
 
@@ -58,6 +82,12 @@ export function groundY(x, z) {
   if (x > ENGAWA.x0 + 3 && x < ENGAWA.x0 + 7 && z > ENGAWA.z0 - 0.75) return ENGAWA.y * 0.5; // 沓脫石
   if (x > DECK.x0 && x < DECK.x1 && z < DECK.z1) return DECK.y;
   if (x > LOUNGE.x0 && x < LOUNGE.x1 && z > LOUNGE.z0 && z < LOUNGE.z1) return LOUNGE.y;
+  const ts = tsuboAt(x, z);
+  if (ts === 1) return TSUBO.rimH;
+  if (ts === 2) {
+    for (const [sx, sz, r, h] of TSUBO.steps) if (Math.hypot(x - sx, z - sz) < r) return TSUBO.floorY + h;
+    return TSUBO.floorY;
+  }
   const t = poolT(x, z);
   if (t < 1) return -POOL.depth * smooth(1, 0.78, t);
   return 0;
@@ -122,8 +152,13 @@ for (const s of [-0.6, 0, 0.6]) {
 circles.push({ x: LOUNGE.table.x, z: LOUNGE.table.z, r: 0.24 });
 circles.push({ x: LOUNGE.parasol.x, z: LOUNGE.parasol.z, r: 0.14 });
 
-// 不撒落葉的範圍（足湯、躺椅與小几）
+// 壺與竹筒湯口
+circles.push({ x: TSUBO.x, z: TSUBO.z, r: TSUBO.pot.r });
+circles.push({ x: TSUBO.spout.postX, z: TSUBO.z, r: 0.07 });
+
+// 不撒落葉的範圍（足湯、躺椅與小几、壺湯）
 export function noLeaf(x, z) {
+  if (Math.hypot(x - TSUBO.x, z - TSUBO.z) < TSUBO.r + TSUBO.rimW + 0.04) return true;
   if (x > ASHIYU.x0 - 0.1 && x < ASHIYU.x1 + 0.1 && z > ASHIYU.tubZ0 - 0.1 && z < ASHIYU.seatZ1 + 0.03) return true;
   const c = LOUNGE.chair, dx = x - c.x, dz = z - c.z;
   const u = dx * Math.cos(c.rot) + dz * Math.sin(c.rot), v = -dx * Math.sin(c.rot) + dz * Math.cos(c.rot);
@@ -153,8 +188,10 @@ export const LANTERNS = [
   [-7.6, 7.2, 'stone'], [-8.4, 3.9, 'stone'], [3.6, 5.4, 'stone'], [9.2, -6.2, 'stone'],
   [-10.6, -1.0, 'stone'], [-3.9, -8.9, 'andon'], [3.9, -8.9, 'andon'],
   [-9.4, 9.5, 'andon'], [1.6, 9.5, 'andon'],
+  [11.35, -7.85, 'andon'], // 壺湯旁
+  [-10.05, -9.25, 'ashimoto'], // 躺椅頭側後方的足元灯（鐵笠遮住上方，光只往下灑）
 ];
-LANTERNS.forEach(([x, z, kind]) => circles.push({ x, z, r: kind === 'stone' ? 0.32 : 0.2 }));
+LANTERNS.forEach(([x, z, kind]) => circles.push({ x, z, r: kind === 'stone' ? 0.32 : kind === 'andon' ? 0.2 : 0.12 }));
 
 // 飛石小徑：從沓脫石到池的西南入口
 export const PATH_STONES = [
@@ -164,6 +201,8 @@ export const PATH_STONES = [
   [-3.0, 4.6, 0.42], [-1.6, 5.0, 0.46], [0.2, 4.9, 0.44], [1.9, 5.3, 0.48],
   // 往東屋
   [-6.9, 4.6, 0.42], [-7.8, 3.2, 0.46], [-8.6, 2.2, 0.44],
+  // 從主池東側往壺湯
+  [7.3, -4.5, 0.46], [7.75, -5.45, 0.42], [8.0, -6.35, 0.48], [8.45, -7.15, 0.44],
 ];
 
 // 小物位置（模型在 props.js；rot 是繞 y 軸的朝向）
@@ -185,7 +224,7 @@ export function zoneAt(x, z) {
   if (x > ENGAWA.x0 && x < ENGAWA.x1 && z > ENGAWA.z0 - 0.1) return '湯屋簷廊';
   if (x > DECK.x0 && x < DECK.x1 && z < DECK.z1) return '望景木台';
   if (x > LOUNGE.x0 && x < LOUNGE.x1 && z > LOUNGE.z0 && z < LOUNGE.z1) return '西翼・躺椅';
-  if (Math.hypot(x - TSUBO.x, z - TSUBO.z) < TSUBO.r) return '東翼・壺湯（準備中）';
+  if (tsuboAt(x, z)) return '東翼・壺湯';
   if (inWater(x, z)) {
     return x > AZUMAYA.x0 && x < AZUMAYA.x1 && z > AZUMAYA.z0 && z < AZUMAYA.z1 ? '半露天區（池中）' : '主池';
   }
@@ -204,7 +243,7 @@ export const LABELS = [
   ['湯口', YUGUCHI.x + 0.6, 2.6, YUGUCHI.z],
   ['望景木台・足湯', 0, 2.4, -10.8],
   ['躺椅', LOUNGE.chair.x, 1.9, LOUNGE.chair.z],
-  ['壺湯（預定地）', TSUBO.x, 1.6, TSUBO.z],
+  ['壺湯', TSUBO.x, 1.9, TSUBO.z],
   ['海灣・遠山（敞開面）', 0, 5.5, -26],
   ['鹿威し', PROPS.shishi.x, 1.6, PROPS.shishi.z],
   ['木桶', PROPS.oke.x, 1.2, PROPS.oke.z],
