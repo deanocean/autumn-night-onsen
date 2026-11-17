@@ -283,6 +283,32 @@ function gegyoGeo(s = 1) {
   g.moveTo(0, 0.12); g.lineTo(0.13, 0.02); g.quadraticCurveTo(0.2, -0.16, 0, -0.34); g.quadraticCurveTo(-0.2, -0.16, -0.13, 0.02); g.closePath();
   return new THREE.ExtrudeGeometry(g, { depth: 0.04, bevelEnabled: false }).translate(0, -0.12, 0).scale(s, s, 1);
 }
+// 蟇股：蛙腳形的木雕（面向 ±z，底邊中央在原點，w 寬、h 高），上面頂一個斗，挖空處有一朵雕花
+function kaerumataGeo(w, h) {
+  const s = new THREE.Shape(), a = w / 2;
+  s.moveTo(-a * 0.24, h);
+  s.lineTo(a * 0.24, h);
+  s.bezierCurveTo(a * 0.3, h * 0.45, a * 0.78, h * 0.3, a, h * 0.06); // 外緣：往下張開的腳
+  s.quadraticCurveTo(a * 1.02, 0, a * 0.94, 0);
+  s.lineTo(a * 0.7, 0);
+  s.bezierCurveTo(a * 0.62, h * 0.32, a * 0.28, h * 0.6, 0, h * 0.64); // 內緣：腳與腳之間的拱
+  s.bezierCurveTo(-a * 0.28, h * 0.6, -a * 0.62, h * 0.32, -a * 0.7, 0);
+  s.lineTo(-a * 0.94, 0);
+  s.quadraticCurveTo(-a * 1.02, 0, -a, h * 0.06);
+  s.bezierCurveTo(-a * 0.78, h * 0.3, -a * 0.3, h * 0.45, -a * 0.24, h);
+  const body = new THREE.ExtrudeGeometry(s, { depth: 0.07, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.008, bevelSegments: 1 }).translate(0, 0, -0.035);
+  // 雕花：兩片往外捲的葉子夾著中央的花苞，退在本體後面一點
+  const leaf = (k) => {
+    const l = new THREE.Shape();
+    l.moveTo(0, 0); l.quadraticCurveTo(k * a * 0.36, h * 0.0, k * a * 0.52, h * 0.36); l.quadraticCurveTo(k * a * 0.24, h * 0.38, 0, h * 0.18); l.closePath();
+    return new THREE.ExtrudeGeometry(l, { depth: 0.04, bevelEnabled: false }).translate(0, h * 0.04, -0.02).toNonIndexed();
+  };
+  return mergeGeometries([
+    body.toNonIndexed(), leaf(1), leaf(-1),
+    new THREE.SphereGeometry(h * 0.19, 10, 8).scale(0.8, 1.25, 0.55).translate(0, h * 0.33, 0).toNonIndexed(),
+    new THREE.BoxGeometry(a * 0.62, 0.075, 0.12).translate(0, h + 0.0375, 0).toNonIndexed(), // 斗
+  ]);
+}
 // 妻飾：三角的白壁、木連格子、破風板、懸魚。在本地座標面向 +z（頂點在 x = 0），m 把它擺到世界裡。
 // yb 是底邊、ya 是屋面在頂點的高度、q 是屋面的斜率；破風板貼在屋面的瓦底下，往前挑出 over。
 // grain 是破風板的木紋方向（擺好之後的世界軸：面向 z 的用 0、面向 x 的用 2）
@@ -468,7 +494,7 @@ export function buildWorld(scene) {
   }
 
   // ---------- 湯屋與簷廊（道後溫泉本館風格） ----------
-  // 由下往上層層疊起：深簷的下屋與簷廊、入口的唐破風與匾額、圍著高欄的二樓、灰黑本瓦的入母屋大屋頂
+  // 由下往上層層疊起：深簷的下屋與簷廊、入口的唐破風與蟇股、圍著高欄的二樓、灰黑本瓦的入母屋大屋頂
   // （正面前後兩層千鳥破風）、屋脊中央仿振鷺閣的小塔樓（紅玻璃窗，夜裡透紅光）。
   // 不旋轉的零件收在 yg 最後依材質合併；屋頂上的東西收在 roofG（鳥瞰時整組隱藏）。
   const lamps = []; // 之後要發光的燈具位置（第四階段接上光源）
@@ -621,7 +647,7 @@ export function buildWorld(scene) {
       L.boxes.push({ x0: bx - 0.75, x1: bx + 0.75, z0: bz - 0.21, z1: bz + 0.3 });
     }
 
-    // --- 入口的唐破風：簷口在入口上方鼓起一道弧，瓦順著弧面往兩旁鋪；弧下是虹樑、匾額與兎毛通 ---
+    // --- 入口的唐破風：簷口在入口上方鼓起一道弧，瓦順著弧面往兩旁鋪；弧下是虹樑、蟇股與兎毛通 ---
     {
       const HW = 1.95, KH = 0.88, y0 = pentEaveY + 0.1, z0 = 7.98, z1 = 10.2, n = 32;
       const prof = (t) => y0 + KH * (0.5 + 0.5 * Math.cos(Math.PI * Math.pow(t, 0.9))) + 0.06 * Math.pow(Math.max(0, (t - 0.75) / 0.25), 2);
@@ -657,21 +683,9 @@ export function buildWorld(scene) {
       rc.add(wood(CEDAR, 0, 0.16, 0.5, true), new THREE.ShapeGeometry(band(0.1, null)), faceM('n', doorX, z0 + 0.07));
       rc.add(M.dark, new THREE.ShapeGeometry(band(0.02, null)), new THREE.Matrix4().makeTranslation(doorX, 0, z1));
       rc.add(wood(CEDAR_DARK, 0), boxGeo(HW * 2 - 0.3, 0.22, 0.17, doorX, y0 - 0.16, z0 + 0.0)); // 虹樑
-      rc.add(DARK1, gegyoGeo(1.25), faceM('n', doorX, z0 - 0.12).setPosition(doorX, y0 + KH - 0.24, z0 - 0.12)); // 兎毛通
-      // 匾額：墨綠底金字，由右往左讀「秋夜乃湯」，上緣往前傾
-      const pt = textTexture('湯乃夜秋', { bg: '#1c3528', fg: '#d9b55e', size: 150, w: 768, h: 288, font: '700', scale: 3 });
-      {
-        const c2 = pt.image.getContext('2d'), s = 3;
-        c2.setTransform(s, 0, 0, s, 0, 0);
-        c2.strokeStyle = '#c9a24e'; c2.lineWidth = 9; c2.strokeRect(10, 10, 748, 268);
-        c2.strokeStyle = 'rgba(20,12,6,0.85)'; c2.lineWidth = 3; c2.strokeRect(21, 21, 726, 246);
-      }
-      const pq = new THREE.Group();
-      pq.position.set(doorX, y0 + 0.36, z0 - 0.17);
-      pq.rotation.x = 0.2;
-      roofG.add(pq);
-      mesh(pq, new THREE.PlaneGeometry(1.5, 0.56), new THREE.MeshStandardMaterial({ map: pt, roughness: 0.7 }), 0, 0, -0.026).rotation.y = Math.PI;
-      wbox(pq, 1.58, 0.64, 0.05, 0, 0, 0.002, CEDAR_DARK);
+      rc.add(DARK1, gegyoGeo(0.8), faceM('n', doorX, z0 - 0.12).setPosition(doorX, y0 + KH - 0.06, z0 - 0.12)); // 兎毛通（從破風板的頂點垂下）
+      // 蟇股：坐在虹樑正中央，兩腳往外張開，中間挖空處有一朵雕花
+      rc.add(wood(0x8e6a48, 0), kaerumataGeo(0.9, 0.32), new THREE.Matrix4().makeTranslation(doorX, y0 - 0.05, z0));
       // 入口兩側的提燈
       for (const sd of [-1, 1]) {
         const x = doorX + sd * 0.98, y = 2.28, z = 8.75;
