@@ -1,6 +1,6 @@
 // 植栽：場內的楓樹、場外的樹林、地面與水面的落葉。
 // 楓樹：程序長出彎曲的枝幹（管狀網格），葉子是一張張「帶著十來片楓葉的小枝」貼片（InstancedMesh）。
-// 場外樹林用較大的葉叢貼片包住一個深色的芯，數量少很多。
+// 場外樹林：闊葉樹是幾團小葉叢貼片包住暗色的芯，杉是一層層短枝、枝端一簇簇杉葉；位置固定在 layout.js。
 // 葉片共用一份材質：頂點 shader 做微風搖曳，片段 shader 加上逆光透亮與夜晚燈火的暖色。
 import * as THREE from 'three';
 import * as L from './layout.js';
@@ -75,49 +75,94 @@ function drawSprig(ctx, rand) {
   });
 }
 
-// 闊葉叢：三十多片卵形葉子
+// 一片小葉（葉基在原點、葉尖朝 -y）：卵形漸尖帶細鋸齒，或淺裂的楢葉
+function smallLeaf(ctx, s, lobed) {
+  const N = 14, pts = [];
+  for (let i = 1; i < N; i++) {
+    const t = i / N;
+    let w = 1.05 * Math.pow(t, 0.55) * Math.pow(1 - t, 1.3);
+    w *= lobed ? 0.8 + 0.35 * Math.abs(Math.sin(t * Math.PI * 3.6)) : 1 + (i % 2) * 0.09;
+    pts.push([w * s, -t * s]);
+  }
+  ctx.beginPath(); ctx.moveTo(0, 0);
+  pts.forEach(([x, y]) => ctx.lineTo(x, y));
+  ctx.lineTo(0, -s);
+  for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(-pts[i][0] * (lobed ? 1 : 0.94), pts[i][1]);
+  ctx.closePath();
+}
+
+// 闊葉叢：細枝上兩百多片小葉，整體是邊緣不規則的一團（裡面的暗、外面的亮）
 function drawClump(ctx, rand) {
-  for (let i = 0; i < 40; i++) {
-    const r = 195 * Math.sqrt(rand()), a = rand() * Math.PI * 2;
-    const x = 256 + Math.cos(a) * r, y = 256 + Math.sin(a) * r * 0.95, s = 58 + rand() * 34;
-    const g = 150 + (i / 40) * 70 + rand() * 35;
+  const ph = [rand() * 6.283, rand() * 6.283, rand() * 6.283];
+  const edge = (a) => 200 * (0.84 + 0.09 * Math.sin(3 * a + ph[0]) + 0.06 * Math.sin(5 * a + ph[1]) + 0.04 * Math.sin(8 * a + ph[2]));
+  const cx = 256, cy = 262;
+  // 細枝：從貼片根部伸進葉叢
+  ctx.lineCap = 'round';
+  for (let k = 0; k < 7; k++) {
+    const a = -Math.PI / 2 + (rand() - 0.5) * 2.6, r = edge(a) * (0.55 + rand() * 0.35);
+    const ex = cx + Math.cos(a) * r, ey = cy + Math.sin(a) * r;
+    ctx.strokeStyle = '#4a3a2e'; ctx.lineWidth = 3.2 - k * 0.2;
+    ctx.beginPath(); ctx.moveTo(256 + (rand() - 0.5) * 20, 510);
+    ctx.quadraticCurveTo(256 + (ex - 256) * 0.2, cy + 60, ex, ey); ctx.stroke();
+  }
+  const leaves = [];
+  for (let i = 0; i < 250; i++) {
+    const a = rand() * 6.283, r = edge(a) * Math.sqrt(rand());
+    leaves.push({ a, r, rr: r / edge(a), x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 0.96 });
+  }
+  leaves.sort((p, q) => p.rr - q.rr);
+  for (const { a, rr, x, y } of leaves) {
+    const s = 30 + rand() * 18, lobed = rand() < 0.22;
+    const g = (125 + rr * 95 + rand() * 40) * (rand() < 0.12 ? 0.75 : 1), warm = rand();
     ctx.save();
-    ctx.translate(x, y); ctx.rotate(a + Math.PI / 2 + (rand() - 0.5) * 1.6);
-    ctx.beginPath(); ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(0.52 * s, -0.12 * s, 0.4 * s, -0.78 * s, 0, -s);
-    ctx.bezierCurveTo(-0.4 * s, -0.78 * s, -0.52 * s, -0.12 * s, 0, 0);
-    ctx.fillStyle = `rgb(${g | 0},${(g * 0.94) | 0},${(g * 0.82) | 0})`; ctx.fill();
-    ctx.strokeStyle = 'rgba(40,25,10,0.3)'; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s * 0.9); ctx.stroke();
+    ctx.translate(x, y); ctx.rotate(a + Math.PI / 2 + (rand() - 0.5) * 1.8);
+    smallLeaf(ctx, s, lobed);
+    ctx.fillStyle = `rgb(${Math.min(255, g) | 0},${(g * (0.88 + 0.08 * warm)) | 0},${(g * (0.72 + 0.14 * warm)) | 0})`; ctx.fill();
+    ctx.strokeStyle = 'rgba(40,25,10,0.28)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s * 0.85); ctx.stroke();
     ctx.restore();
   }
 }
 
-// 杉葉：一條主枝，兩側的小枝上密生短針
+// 杉葉：主枝兩側分出一條條像繩子的小枝（短針螺旋密生、往前斜），小枝再分叉，整體是一團
 function drawSugi(ctx, rand) {
-  const needle = (x, y, a, len, g) => {
-    ctx.strokeStyle = `rgb(${(g * 0.9) | 0},${g | 0},${(g * 0.84) | 0})`;
-    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len); ctx.stroke();
-  };
-  const spray = (x0, y0, a, len, depth) => {
-    const n = Math.floor(len / 7);
-    for (let i = 0; i <= n; i++) {
-      const t = i / n, x = x0 + Math.cos(a) * len * t, y = y0 + Math.sin(a) * len * t;
-      ctx.lineWidth = 4.2 - t * 1.5;
-      const g = 150 + rand() * 95;
-      for (const sd of [-1, 1]) needle(x, y, a + sd * (0.55 + rand() * 0.3), (15 + rand() * 9) * (1 - t * 0.4), g);
-      if (depth && i > 1 && i % 5 === 0) for (const sd of [-1, 1]) spray(x, y, a + sd * (0.6 + rand() * 0.25), len * (0.42 - t * 0.2), 0);
-    }
-    needle(x0 + Math.cos(a) * len, y0 + Math.sin(a) * len, a, 16, 210);
-  };
   ctx.lineCap = 'round';
-  ctx.strokeStyle = '#4a3a2c'; ctx.lineWidth = 6;
-  ctx.beginPath(); ctx.moveTo(256, 512); ctx.lineTo(256, 80); ctx.stroke();
-  for (let y = 490; y > 90; y -= 34) {
-    const k = (y - 90) / 400;
-    for (const sd of [-1, 1]) spray(256, y + rand() * 12, -Math.PI / 2 + sd * (0.75 + rand() * 0.3), 60 + 150 * Math.sin(Math.min(1, k * 1.25) * Math.PI * 0.62) + rand() * 20, 1);
+  // 沿著一條彎曲的線畫一串短針：w 是半寬
+  const cord = (x0, y0, a0, bend, len, w, light) => {
+    const n = Math.max(3, Math.floor(len / 3.6));
+    let x = x0, y = y0, a = a0;
+    const g0 = (120 + rand() * 70) * light;
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, ww = w * (1 - t * 0.35);
+      a += bend / n;
+      x += Math.cos(a) * len / n; y += Math.sin(a) * len / n;
+      const g = Math.min(255, g0 * (0.85 + 0.3 * t) + rand() * 35);
+      ctx.strokeStyle = `rgb(${(g * 0.88) | 0},${g | 0},${(g * 0.8) | 0})`;
+      ctx.lineWidth = 2.6;
+      for (const sd of [-1, 1]) {
+        const na = a + sd * (0.55 + rand() * 0.35), nl = ww * (0.9 + rand() * 0.3);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(na) * nl, y + Math.sin(na) * nl); ctx.stroke();
+      }
+    }
+    return { x, y, a };
+  };
+  // 主枝（看不太到，只在縫隙露出）
+  ctx.strokeStyle = '#4a3a2c'; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(256, 512); ctx.quadraticCurveTo(250 + rand() * 12, 300, 256 + (rand() - 0.5) * 30, 100); ctx.stroke();
+  for (let y = 492, k = 0; y > 110; y -= 13 + rand() * 6, k++) {
+    const sd = k % 2 ? 1 : -1, t = (492 - y) / 382;
+    const len = (60 + 120 * Math.sin(Math.min(1, t * 1.15 + 0.12) * Math.PI * 0.85)) * (0.8 + rand() * 0.35);
+    const a = -Math.PI / 2 + sd * (0.65 + rand() * 0.35), bend = -sd * (0.35 + rand() * 0.3);
+    // 小枝先畫分叉（在下面），再畫主線
+    const subs = 1 + Math.floor(rand() * 2.5);
+    for (let j = 0; j < subs; j++) {
+      const f = 0.3 + rand() * 0.45, sa = a + bend * f + sd * (0.5 + rand() * 0.4) * (j % 2 ? -1 : 1);
+      const sx = 256 + Math.cos(a) * len * f, sy = y + Math.sin(a) * len * f;
+      cord(sx, sy, sa, -sd * 0.3, len * (0.35 + rand() * 0.25), 11, 1.05);
+    }
+    cord(256, y, a, bend, len, 12, 0.85 + t * 0.25);
   }
-  spray(256, 110, -Math.PI / 2, 90, 1);
+  cord(256, 130, -Math.PI / 2, (rand() - 0.5) * 0.3, 90, 11, 1.15);
 }
 
 // canvas 轉成貼圖。透明處的顏色填成該格葉子的平均色（canvas 預設是黑的，縮小取樣時葉緣會出現黑邊）
@@ -257,8 +302,9 @@ function foliageMaterial(map) {
 }
 
 // ---------- 貼片的集合 ----------
-function cardGeometry() {
-  const g = new THREE.PlaneGeometry(1, 1, 2, 2);
+// flat：只用一個四邊形（遠處的樹，看不出下垂）
+function cardGeometry(flat = false) {
+  const g = new THREE.PlaneGeometry(1, 1, flat ? 1 : 2, flat ? 1 : 2);
   g.translate(0, 0.5, 0);
   const p = g.attributes.position;
   // 兩側與末端微微下垂
@@ -283,8 +329,8 @@ class Cards {
     this.fx.push(tile, rand(), flex);
     this.count++;
   }
-  build(fol, shadow = true) {
-    const g = cardGeometry();
+  build(fol, shadow = true, flat = false) {
+    const g = cardGeometry(flat);
     g.setAttribute('aNrm', new THREE.InstancedBufferAttribute(new Float32Array(this.n), 3));
     g.setAttribute('aFx', new THREE.InstancedBufferAttribute(new Float32Array(this.fx), 3));
     const mesh = new THREE.InstancedMesh(g, fol.material, this.count);
@@ -477,80 +523,119 @@ function lowBranch(tree, W, cards, rand) {
 }
 
 // ---------- 場外樹林 ----------
-const SUGI_GREEN = [0x1c3522, 0x2c4a2c, 0x3b5a30, 0x565230].map((h) => new THREE.Color(h));
+// 杉：偏橄欄的深綠，少數帶秋天的褐色；同一根枝上的葉片顏色相近，樹冠才會一團一團
+const SUGI_GREEN = [0x22382a, 0x2b4430, 0x354c31, 0x48512f, 0x5a4b2e].map((h) => new THREE.Color(h));
+const SUGI_W = [0.3, 0.6, 0.8, 0.93, 1];
 const BROAD = [0xa3261b, 0xc2521c, 0xd3811f, 0xd9a72b, 0xc9b53c, 0x8f5a26, 0xb8862a, 0x6a7430].map((h) => new THREE.Color(h));
+// 樹冠裡的芯（從葉片縫隙看進去的暗處）：平滑的網格，才不會露出多邊形的面
+const SPHERE = new THREE.SphereGeometry(1, 10, 7), SPHERE_LO = new THREE.SphereGeometry(1, 7, 5), CONE = new THREE.ConeGeometry(1, 1, 9, 3);
+const newCore = () => ({ pos: [], nrm: [], col: [], idx: [] });
 
-// 一棵場外的樹。y 是樹根的地面高度；lite 時用較少、較大的貼片（遠一點的山坡上），maxH 限制樹高（不擋視線）
-function plantTree(rand, W, cards, core, x, y, z, { lite = false, maxH = 99, kind } = {}) {
-  const col = new THREE.Color(), p = new V3(), dir = new V3(), nrm = new V3(), puff = new V3(), out = new V3(), u = new V3();
-  const lump = (geo, cx, cy, cz, sx, sy, sz, c) => {
-    const g = geo.toNonIndexed(), q = g.attributes.position;
+function coreMesh(core, material) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(core.pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(core.nrm, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(core.col, 3));
+  g.setIndex(core.idx);
+  return new THREE.Mesh(g, material);
+}
+
+// 每棵樹用自己的亂數（由位置決定），改一棵不會牽動別棵
+const treeRand = (x, z) => {
+  const r = rng((Math.imul(Math.round(x * 10), 73856093) ^ Math.imul(Math.round(z * 10), 19349663)) >>> 0);
+  r(); r();
+  return r;
+};
+
+// 一棵場外的樹。y 是樹根的地面高度；lite 時用較少的貼片（遠一點的山坡上），maxH 限制樹高（不擋視線）
+function plantTree(W, cards, core, x, y, z, { lite = false, maxH = 99, kind } = {}) {
+  const rand = treeRand(x, z);
+  const col = new THREE.Color(), base = new THREE.Color(), p = new V3(), dir = new V3(), nrm = new V3(), puff = new V3(), out = new V3(), u = new V3();
+  // bump：表面的起伏，芯才不會是一顆光滑的球
+  const lump = (geo, cx, cy, cz, sx, sy, sz, c, bump = 0) => {
+    const q = geo.attributes.position, n = geo.attributes.normal, ix = geo.index, o = core.pos.length / 3;
+    const f1 = rand() * 6.283, f2 = rand() * 6.283;
     for (let i = 0; i < q.count; i++) {
-      core.pos.push(cx + q.getX(i) * sx, cy + q.getY(i) * sy, cz + q.getZ(i) * sz);
+      const X = q.getX(i), Y = q.getY(i), Z = q.getZ(i);
+      const k = 1 + bump * Math.sin(X * 3.1 + f1) * Math.sin(Z * 2.7 + Y * 2.2 + f2);
+      core.pos.push(cx + X * sx * k, cy + Y * sy * k, cz + Z * sz * k);
+      u.set(n.getX(i) / sx, n.getY(i) / sy, n.getZ(i) / sz).normalize();
+      core.nrm.push(u.x, u.y, u.z);
       core.col.push(c.r, c.g, c.b);
     }
+    for (let i = 0; i < ix.count; i++) core.idx.push(o + ix.getX(i));
   };
   const bx = (rand() - 0.5) * 0.5, bz = (rand() - 0.5) * 0.5;
-  const base = lite ? y - 1.2 : y - 0.2; // 坡上的樹根埋深一點，下坡那側才不會懸空
+  const root = lite ? y - 1.2 : y - 0.2; // 坡上的樹根埋深一點，下坡那側才不會懸空
   if (kind === 'sugi' || (kind === undefined && rand() < 0.42)) {
-    // 杉：筆直的幹、細長的圓錐形樹冠，枝葉下垂
-    const h = Math.min(maxH, 13 + rand() * 7), y0 = h * (0.24 + rand() * 0.1), R0 = (1.9 + rand() * 0.9) * Math.min(1, h / 13 + 0.15), top = h + 0.5;
-    tube(W, [new V3(x, base, z), new V3(x + bx * 0.4, y + h * 0.5, z + bz * 0.4), new V3(x + bx, y + h, z + bz)], [0.34, 0.2, 0.03], lite ? 5 : 7);
-    lump(CONE, x + bx * 0.7, y + (y0 + top) / 2 - 0.4, z + bz * 0.7, R0 * 0.5, top - y0 - 0.8, R0 * 0.5, col.setHex(0x101c14));
-    const n = lite ? 85 : 260, big = lite ? 1.5 : 1;
-    for (let k = 0; k < n; k++) {
-      const t = k < (lite ? 7 : 20) ? 0.8 + rand() * 0.2 : 1 - Math.sqrt(1 - rand() * 0.98), yy = y0 + t * (top - y0), rc = R0 * (1 - t) + 0.22, az = rand() * 6.283;
-      out.set(Math.cos(az), 0, Math.sin(az));
-      const size = Math.min(2.4 * big, (rc * 0.8 + 0.7) * big) * (0.75 + rand() * 0.5);
-      // 枝條先往外伸、末端下垂；越靠樹頂垂得越直，收成尖頂
-      const droop = -(0.35 + rand() * 0.75) - t * 0.6;
-      dir.set(out.x + (rand() - 0.5) * 0.5, droop, out.z + (rand() - 0.5) * 0.5).normalize();
-      p.set(x + bx * (yy / h) + out.x * rc * 0.45, y + yy, z + bz * (yy / h) + out.z * rc * 0.45);
-      nrm.set(out.x * 0.5 + (rand() - 0.5) * 0.9, 0.8, out.z * 0.5 + (rand() - 0.5) * 0.9);
-      puff.copy(out).lerp(UP, 0.35).normalize();
-      const g = rand();
-      col.copy(SUGI_GREEN[g < 0.4 ? 0 : g < 0.75 ? 1 : g < 0.9 ? 2 : 3]).multiplyScalar((0.6 + rand() * 0.5) * (0.7 + 0.3 * t));
-      cards.add(p, dir, nrm, size, col, puff, 3, 2.2, rand);
+    // 杉：筆直的幹、細長的圓錐形樹冠；一層層斜伸的短枝，枝端是一簇簇枝葉
+    const h = Math.min(maxH, 13 + rand() * 7), y0 = h * (0.24 + rand() * 0.1), R0 = (1.9 + rand() * 0.8) * Math.min(1, h / 13 + 0.15) * (lite ? 1.2 : 1), top = h + 0.4;
+    tube(W, [new V3(x, root, z), new V3(x + bx * 0.4, y + h * 0.5, z + bz * 0.4), new V3(x + bx, y + h, z + bz)], [0.34, 0.2, 0.03], lite ? 5 : 7);
+    const c = SUGI_GREEN[0].clone().multiplyScalar(0.3);
+    lump(CONE, x + bx * 0.7, y + (y0 + top) / 2 - 0.3, z + bz * 0.7, R0 * 0.36, top - y0 - 0.6, R0 * 0.36, c);
+    const gap = lite ? 0.58 : 0.34, per = lite ? 2 : 3, big = lite ? 1.5 : 1.12;
+    for (let yy = y0; yy < top - 0.5; yy += gap * (0.8 + rand() * 0.4)) {
+      const t = (yy - y0) / (top - y0), rc = R0 * 0.9 * Math.pow(1 - t, 0.85) + 0.3;
+      const nb = 3 + (rand() < 0.5 ? 1 : 0) + (t < 0.55 ? 1 : 0), az0 = rand() * 6.283;
+      const tx = x + bx * (yy / h), tz = z + bz * (yy / h);
+      for (let b = 0; b < nb; b++) {
+        const az = az0 + (b / nb) * 6.283 + (rand() - 0.5) * 0.9, len = rc * (0.7 + rand() * 0.4);
+        out.set(Math.cos(az), 0, Math.sin(az));
+        const r = rand();
+        base.copy(SUGI_GREEN[SUGI_W.findIndex((w) => r < w)]).multiplyScalar((0.75 + rand() * 0.35) * (0.72 + 0.28 * t));
+        for (let k = 0; k < per; k++) {
+          const f = (k + 0.5 + rand() * 0.5) / per, size = Math.min(1.4, 0.55 + len * 0.4) * (0.8 + rand() * 0.4) * big;
+          // 枝先往外斜上、末端下垂；越靠樹頂垂得越直，收成尖頂
+          p.set(tx + out.x * len * f * 0.6, y + yy + len * f * 0.15 - f * f * 0.2, tz + out.z * len * f * 0.6);
+          dir.set(out.x + (rand() - 0.5) * 0.6, -(0.2 + rand() * 0.55) - t * 0.5, out.z + (rand() - 0.5) * 0.6).normalize();
+          nrm.set(out.x * 0.4 + (rand() - 0.5) * 0.8, 1, out.z * 0.4 + (rand() - 0.5) * 0.8);
+          puff.copy(out).lerp(UP, 0.35).normalize();
+          col.copy(base).multiplyScalar((0.88 + rand() * 0.24) * (0.78 + 0.22 * f));
+          cards.add(p, dir, nrm, size, col, puff, 3, 2.2, rand);
+        }
+      }
+    }
+    // 樹梢：幾簇朝上的
+    for (let k = 0; k < (lite ? 3 : 5); k++) {
+      out.set(rand() - 0.5, 0, rand() - 0.5);
+      p.set(x + bx, y + top - 1.2 - k * 0.3, z + bz);
+      dir.set(out.x * 0.5, 1, out.z * 0.5).normalize();
+      nrm.set(out.x, 0.3, out.z + 0.01);
+      puff.copy(UP);
+      col.copy(SUGI_GREEN[1]).multiplyScalar(0.85 + rand() * 0.25);
+      cards.add(p, dir, nrm, (0.7 + rand() * 0.3) * big, col, puff, 3, 2.2, rand);
     }
   } else {
-    // 闊葉樹：幾團葉叢疊成的圓頂
-    const h = Math.min(maxH, 8 + rand() * 5.5), b = BROAD[Math.floor(rand() * BROAD.length)], w = Math.min(1, h / 8 + 0.2);
-    tube(W, [new V3(x, base, z), new V3(x + bx, y + h * 0.45, z + bz), new V3(x + bx * 2, y + h * 0.82, z + bz * 2)], [0.3, 0.19, 0.06], lite ? 5 : 7);
-    const lumps = [[x + bx, y + h * 0.74, z + bz, 1.9 + rand() * 0.5]];
-    for (let k = 0; k < (lite ? 4 : 7); k++) lumps.push([x + (rand() - 0.5) * 4.6 * w, y + h * (0.48 + rand() * 0.44), z + (rand() - 0.5) * 4.6 * w, (1.0 + rand() * 1.0) * (lite ? 1.2 : 1)]);
-    const per = lite ? 18 : 40, big = lite ? 1.5 : 1;
+    // 闊葉樹：幾團葉叢疊成的圓頂；每團的亮度不同，看得出一團一團
+    const h = Math.min(maxH, 8 + rand() * 5.5), b = BROAD[Math.floor(rand() * BROAD.length)], w = Math.min(1, h / 8 + 0.2) * (lite ? 1.2 : 1);
+    tube(W, [new V3(x, root, z), new V3(x + bx, y + h * 0.45, z + bz), new V3(x + bx * 2, y + h * 0.82, z + bz * 2)], [0.3, 0.19, 0.06], lite ? 5 : 7);
+    const lumps = [[x + bx, y + h * 0.74, z + bz, 2.1 + rand() * 0.5]];
+    for (let k = 0; k < (lite ? 5 : 7); k++) lumps.push([x + (rand() - 0.5) * 5.2 * w, y + h * (0.48 + rand() * 0.44), z + (rand() - 0.5) * 5.2 * w, (1.15 + rand() * 1.0) * (lite ? 1.35 : 1)]);
+    const per = lite ? 38 : 76, big = lite ? 1.55 : 1.08;
     for (const [cx, cy, cz, rad] of lumps) {
-      lump(ICO, cx, cy, cz, rad * 0.62, rad * 0.5, rad * 0.62, col.copy(b).multiplyScalar(0.2));
-      for (let k = 0; k < per; k++) {
+      lump(lite ? SPHERE_LO : SPHERE, cx, cy, cz, rad * 0.48, rad * 0.4, rad * 0.48, col.copy(b).multiplyScalar(0.2), 0.18);
+      const shade = 0.85 + rand() * 0.28, n = Math.round(per * (0.55 + 0.45 * rad / 2));
+      for (let k = 0; k < n; k++) {
         u.set(rand() - 0.5, rand() - 0.32, rand() - 0.5).normalize();
         dir.set(rand() - 0.5, rand() - 0.75, rand() - 0.5);
         dir.addScaledVector(u, -dir.dot(u)).normalize().addScaledVector(u, 0.2 + rand() * 0.7).normalize();
-        const size = (1.1 + rand() * 1.0) * big;
-        p.set(cx + u.x * rad * 0.7, cy + u.y * rad * 0.6, cz + u.z * rad * 0.7).addScaledVector(dir, -size * 0.3);
+        const size = (0.9 + rand() * 0.6) * big, d = 0.45 + rand() * 0.35;
+        p.set(cx + u.x * rad * d, cy + u.y * rad * d * 0.85, cz + u.z * rad * d).addScaledVector(dir, -size * 0.3);
         nrm.set(u.x + (rand() - 0.5) * 0.5, u.y + (rand() - 0.5) * 0.5, u.z + (rand() - 0.5) * 0.5);
         puff.copy(u).lerp(UP, 0.3).normalize();
-        col.copy(b).offsetHSL((rand() - 0.5) * 0.045, 0, (rand() - 0.5) * 0.08).multiplyScalar((0.55 + rand() * 0.45) * (0.72 + 0.28 * (u.y * 0.5 + 0.5)));
+        col.copy(b).offsetHSL((rand() - 0.5) * 0.045, 0, (rand() - 0.5) * 0.08)
+          .multiplyScalar(shade * (0.6 + rand() * 0.4) * (0.72 + 0.28 * (u.y * 0.5 + 0.5)) * (0.8 + 0.25 * (d - 0.45) / 0.35));
         cards.add(p, dir, nrm, size, col, puff, 2, 2.2, rand);
       }
     }
   }
 }
-const ICO = new THREE.IcosahedronGeometry(1, 1), CONE = new THREE.ConeGeometry(1, 1, 9, 3);
 
-// 場內四周（竹垣外的平台）的樹
+// 場內四周（竹垣外的平台）的樹：位置在 layout.js
 function buildForest(rand, W, cards, core) {
-  const placed = [];
-  for (let i = 0; i < 46; i++) {
-    const side = i % 3;
-    let x, z, ok = false;
-    for (let t = 0; t < 12 && !ok; t++) {
-      x = side === 0 ? 16 + rand() * 12 : side === 1 ? -16 - rand() * 12 : -22 + rand() * 44;
-      z = side === 2 ? 19 + rand() * 12 : -12 + rand() * 30;
-      ok = placed.every(([px, pz]) => Math.hypot(px - x, pz - z) > 2.6);
-    }
-    placed.push([x, z]);
-    plantTree(rand, W, cards, core, x, 0, z);
-  }
+  L.FOREST.forEach(([x, z, k]) => plantTree(W, cards, core, x, 0, z, { kind: k === 's' ? 'sugi' : 'broad' }));
+  // 6E-1 以前樹林是用這組亂數長的：跳過同樣多個，場內落葉的位置才不會變
+  for (let i = 0; i < 181170; i++) rand();
 }
 
 // ---------- 落葉 ----------
@@ -659,36 +744,28 @@ export function createTrees(scene, world, slopeSpots = []) {
   OVERHEAD.push(branches, mapleLeaves, lowLeaves);
 
   // 場外樹林
-  const FW = newWood(), forestCards = new Cards(), core = { pos: [], col: [] };
+  const FW = newWood(), forestCards = new Cards(), core = newCore();
   buildForest(rand, FW, forestCards, core);
 
-  // 崖下山坡上的樹（vista.js 挑好位置與高度上限）：遠一點的貼片少而大、不投影
+  // 崖下山坡上的樹（vista.js 挑好位置與高度上限）：遠一點的貼片少一些、不投影
   // 崖邊 40 公尺內的樹用完整細節（算進場外樹林那組，會投影）
-  const SW = newWood(), slopeCards = new Cards(), sc = { pos: [], col: [] };
-  const srand = rng(777); // 另用一組亂數，場內原本的落葉位置才不會跟著變
+  const SW = newWood(), slopeCards = new Cards(), sc = newCore();
   slopeSpots.forEach(([x, y, z, maxH, near]) => {
-    if (near) plantTree(srand, FW, forestCards, core, x, y, z, { maxH });
-    else plantTree(srand, SW, slopeCards, sc, x, y, z, { lite: true, maxH });
+    if (near) plantTree(FW, forestCards, core, x, y, z, { maxH });
+    else plantTree(SW, slopeCards, sc, x, y, z, { lite: true, maxH });
   });
-  const coreGeo = new THREE.BufferGeometry();
-  coreGeo.setAttribute('position', new THREE.Float32BufferAttribute(core.pos, 3));
-  coreGeo.setAttribute('color', new THREE.Float32BufferAttribute(core.col, 3));
-  coreGeo.computeVertexNormals();
-  const coreMesh = new THREE.Mesh(coreGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
-  coreMesh.castShadow = true;
+  const coreMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+  const forestCore = coreMesh(core, coreMat);
+  forestCore.castShadow = true;
   const forestLeaves = forestCards.build(foliageMaterial(atlas));
-  group.add(woodMesh(FW, bark), coreMesh, forestLeaves);
+  group.add(woodMesh(FW, bark), forestCore, forestLeaves);
 
   if (slopeSpots.length) {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(sc.pos, 3));
-    g.setAttribute('color', new THREE.Float32BufferAttribute(sc.col, 3));
-    g.computeVertexNormals();
-    const slopeLeaves = slopeCards.build(foliageMaterial(atlas), false);
+    const slopeLeaves = slopeCards.build(foliageMaterial(atlas), false, true);
     slopeLeaves.receiveShadow = false;
     const slopeWood = woodMesh(SW, bark);
     slopeWood.castShadow = false;
-    group.add(slopeWood, new THREE.Mesh(g, coreMesh.material), slopeLeaves);
+    group.add(slopeWood, coreMesh(sc, coreMat), slopeLeaves);
   }
 
   const fallen = fallenLeaves(scene, world, maples, leafMap, rand);
