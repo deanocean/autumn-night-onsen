@@ -5,7 +5,7 @@ import { createTrees } from './trees.js';
 import { createWater } from './water.js';
 import { createSteam } from './steam.js';
 import { createSky } from './sky.js';
-import { createVista, slopeTreeSpots } from './vista.js';
+import { createVista, slopeTreeSpots, ridgeTreeSpots } from './vista.js';
 import { createLights } from './lights.js';
 import { createDayNight } from './daynight.js';
 import { createGuides } from './labels.js';
@@ -59,7 +59,7 @@ const camera = new THREE.PerspectiveCamera(68, 1, 0.08, 70000);
 
 const { world, lamps } = buildWorld(scene);
 const props = createProps(world);
-const trees = createTrees(scene, world, slopeTreeSpots());
+const trees = createTrees(scene, world, [...slopeTreeSpots(), ...ridgeTreeSpots()]);
 const water = createWater(scene);
 createSteam(scene);
 const sky = createSky(scene, renderer);

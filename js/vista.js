@@ -160,27 +160,51 @@ void main(){
   float grain = mix(vnoise(vec3(P.xz / s0, 1.3)), vnoise(vec3(P.xz / (s0 * 2.0), 1.3)), lg - l0);
   alb *= mix(1.0, 0.62 + 0.76 * grain, lod * rs(90.0, 20.0, px));
 
-  // 崖下近處的山坡：實際的樹（trees.js）腳下是林床，矮竹與灌木、落葉
-  float dP = length(max(abs(P.xz - vec2(0.0, 13.5)) - vec2(34.0, 26.5), 0.0));
-  float under = rs(120.0, 35.0, dP);
+  // 崖下近處的山坡：實際的樹（trees.js）腳下是林床，矮竹與灌木、落葉。
+  // 北側（崖下）整片都是；東西南三面只有平台邊緣往外十幾公尺（再外面是樹冠，實際的樹種在上面，見 ridgeTreeSpots）
+  float dP = length(max(abs(P.xz - vec2(0.0, 13.5)) - vec2(34.0, 26.5), 0.0)); // 離平台邊緣幾公尺
+  float under = max(rs(120.0, 35.0, dP) * rs(-6.0, -16.0, P.z), rs(16.0, 5.0, dP));
   if (under > 0.0) {
     float u1 = fbm(vec3(P.xz / 2.6, 3.0)), u2 = fbm2(vec3(P.xz / 0.45, P.y / 0.45));
-    vec3 uc = mix(vec3(0.060, 0.085, 0.035), vec3(0.15, 0.17, 0.06), rs(0.3, 0.7, u1));
-    uc = mix(uc, vec3(0.20, 0.10, 0.045), rs(0.55, 0.8, fbm2(vec3(P.xz / 6.0, 9.0))) * 0.7);
-    uc *= 0.55 + 0.9 * u2;
+    // 矮竹與灌木的叢（深綠、橄欖），中間是落葉堆（褐、偶爾紅橙）
+    float bush = rs(0.38, 0.62, u1);
+    vec3 uc = mix(vec3(0.075, 0.055, 0.032), mix(vec3(0.055, 0.08, 0.032), vec3(0.15, 0.17, 0.06), rs(0.5, 0.8, u1)), bush);
+    uc = mix(uc, vec3(0.20, 0.10, 0.045), rs(0.55, 0.8, fbm2(vec3(P.xz / 6.0, 9.0))) * 0.6);
+    float litter = vnoise(vec3(P.xz / 0.32, 2.0)) * rs(0.3, 0.06, px);
+    uc = mix(uc, mix(vec3(0.30, 0.07, 0.03), vec3(0.34, 0.17, 0.04), vnoise(vec3(P.xz / 0.9, 5.0))), rs(0.62, 0.8, litter) * (1.0 - bush) * 0.55);
+    // 叢的頂亮、叢與叢之間暗（陰影）
+    uc *= (0.6 + 0.8 * u2) * mix(0.78, 1.08, bush);
+    // 近看（崖邊腳下幾公尺）才有的細紋：草葉、碎土、小石子
+    float fg = vnoise(vec3(P.xz / 0.025, P.y / 0.025)) * 0.45 + vnoise(vec3(P.xz / 0.07, P.y / 0.07 + 2.0)) * 0.35 + vnoise(vec3(P.xz / 0.18, P.y / 0.18 + 7.0)) * 0.2;
+    float nearF = rs(0.06, 0.012, px);
+    uc *= mix(1.0, 0.2 + 1.6 * fg * fg, nearF);
+    uc = mix(uc, uc * vec3(0.8, 1.15, 0.7), rs(0.55, 0.75, vnoise(vec3(P.xz / 0.04, P.y / 0.04 + 5.0))) * nearF * 0.6); // 草葉的綠
     alb = mix(alb, uc * 0.8, under);
-    nL = normalize(mix(nL, normalize(N + vec3(u2 - 0.4, 0.0, u1 - 0.5) * 0.7), under));
+    nL = normalize(mix(nL, normalize(N + vec3(u2 - 0.4, 0.0, u1 - 0.5) * (0.7 + 0.6 * bush)), under));
   }
 
   // 陡坡露出岩壁
   float rock = rs(0.58, 0.42, N.y) * rs(0.4, 0.62, fbm2(vec3(P.xz / 25.0, P.y / 25.0)));
   alb = mix(alb, vec3(0.19, 0.17, 0.15) * (0.8 + 0.4 * fbm2(vec3(P.xz / 6.0, 2.0))), rock);
 
-  // 溫泉所在的平台：林床（落葉與土），不畫樹冠（實際的樹在 trees.js）
-  float floorM = rs(-3.0, -0.6, vH) * rs(260.0, 120.0, length(P.xz));
-  vec3 floorC = mix(vec3(0.09, 0.065, 0.04), vec3(0.17, 0.10, 0.05), fbm2(vec3(P.xz / 1.7, 4.0)));
-  alb = mix(alb, floorC, floorM);
-  nL = normalize(mix(nL, N, floorM));
+  // 平台邊緣往下的頭幾公尺：土與岩塊露出來，夾著草
+  float lip = rs(9.0, 3.0, dP) * rs(0.97, 0.82, N.y); // 網格在邊緣是 1.2 公尺寬的一列斜面，大半還在平台範圍內：只看坡度
+  if (lip > 0.0) {
+    float l1 = fbm2(vec3(P.xz / 1.3, P.y / 1.3 + 4.0)), l2 = vnoise(vec3(P.xz / 0.25, P.y / 0.25));
+    vec3 lc = mix(vec3(0.11, 0.075, 0.045), vec3(0.17, 0.155, 0.13), rs(0.55, 0.7, l1)); // 土、岩
+    lc = mix(lc, vec3(0.08, 0.10, 0.035), rs(0.45, 0.25, l1) * 0.8);                       // 草
+    lc *= 0.6 + 0.8 * l2;
+    float lf = vnoise(vec3(P.xz / 0.025, P.y / 0.025 + 3.0)) * 0.6 + vnoise(vec3(P.xz / 0.08, P.y / 0.08 + 9.0)) * 0.4;
+    lc *= mix(1.0, 0.2 + 1.6 * lf * lf, rs(0.06, 0.012, px));
+    alb = mix(alb, lc, lip * 0.85);
+    nL = normalize(mix(nL, normalize(N + vec3(l1 - 0.5, 0.0, l2 - 0.5) * 1.1), lip));
+  }
+
+  // 溫泉所在的平台：林床（落葉與土），不畫樹冠（實際的樹在 trees.js）。只到平台邊緣，坡面不算
+  // 顏色沿用上面的林床（under 在平台上是 1），只偏褐一點、起伏壓平一半
+  float floorM = rs(1.2, 0.2, dP) * rs(0.75, 0.93, N.y);
+  alb = mix(alb, alb * vec3(1.1, 0.95, 0.85), floorM);
+  nL = normalize(mix(nL, N, floorM * 0.5));
 
   // 聚落的地面：房子是另外蓋的實體（buildHouses），這裡只畫房子之間的巷道、空地（灰）與菜園、庭木（綠）
   float town = townMask(P.xz) * rs(0.6, 0.85, N.y) * rs(95.0, 30.0, h) * step(0.0, h);
@@ -215,9 +239,18 @@ void main(){
 
   // ---------- 海面 ----------
   // 波紋：遠處的格子比像素還小就淡掉，免得閃爍
-  float ws = rs(3.0, 0.4, px);
-  vec2 wp = P.xz * 0.12 + vec2(uTime * 0.05, uTime * 0.03);
-  vec3 wn = normalize(vec3((vnoise(vec3(wp, 1.0)) - 0.5) * 0.25 * ws, 1.0, (vnoise(vec3(wp.yx * 1.3, 4.0)) - 0.5) * 0.25 * ws));
+  // 三層不同尺度（約 11、4、1.6 公尺）、座標各轉一個角度、各自往不同方向流的波疊起來，才不會排成整齊的橫紋；
+  // 每層沿風向拉長一點（波峰是橫的長條），比像素小的那層先淡掉
+  vec2 wsl = vec2(0.0);
+  if (water > 0.0) {
+    vec2 q1 = mat2(0.84, 0.54, -0.54, 0.84) * P.xz / vec2(11.0, 7.0) + vec2(uTime * 0.045, uTime * 0.02);
+    vec2 q2 = mat2(0.36, -0.93, 0.93, 0.36) * P.xz / vec2(4.2, 2.9) + vec2(-uTime * 0.07, uTime * 0.05);
+    vec2 q3 = mat2(0.97, 0.26, -0.26, 0.97) * P.xz / vec2(1.7, 1.2) + vec2(uTime * 0.12, -uTime * 0.09);
+    wsl += (vec2(vnoise(vec3(q1, 1.0)), vnoise(vec3(q1.yx + 3.7, 4.0))) - 0.5) * 0.18 * rs(9.0, 1.5, px);
+    wsl += (vec2(vnoise(vec3(q2, 2.0)), vnoise(vec3(q2.yx + 1.9, 5.0))) - 0.5) * 0.12 * rs(3.5, 0.6, px);
+    wsl += (vec2(vnoise(vec3(q3, 3.0)), vnoise(vec3(q3.yx + 6.1, 6.0))) - 0.5) * 0.1 * rs(1.4, 0.25, px);
+  }
+  vec3 wn = normalize(vec3(wsl.x, 1.0, wsl.y));
   // 風吹過的區塊：海面有亮有暗的大片紋理
   float streak = fbm2(vec3(P.x / 900.0, P.z / 260.0, 2.0));
   vec3 R = reflect(-V, wn);
@@ -278,6 +311,46 @@ export function slopeTreeSpots() {
   }
   return spots;
 }
+
+// 平台東、西、南三面坡上的樹（湯屋後方的稜線、竹垣外往下的坡）：[x, 地面高, z, 樹高上限, false]。
+// 只種從場內或觀景點看得到的地方（地形擋住的稜線背面不種）；地面是 shader 畫的樹冠，樹與樹之間看起來仍是林子。
+const RIDGE_EYES = [[0, 1.7, 4], [-12, 1.7, -9], [12, 1.7, -9], [6, 9, -17], [-4, 1.7, 9]];
+function seen(x, y, z) {
+  for (const [ex, ey, ez] of RIDGE_EYES) {
+    let ok = true;
+    for (let i = 1; i < 14 && ok; i++) {
+      const t = i / 14, px = ex + (x - ex) * t, pz = ez + (z - ez) * t;
+      // 平台本身（場內地面）不算遮擋
+      if (px > PLATEAU.x0 && px < PLATEAU.x1 && pz > PLATEAU.z0 && pz < PLATEAU.z1) continue;
+      if (heightAt(px, pz) > ey + (y - ey) * t) ok = false;
+    }
+    if (ok) return true;
+  }
+  return false;
+}
+export function ridgeTreeSpots() {
+  let seed = 4127;
+  const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const P = PLATEAU, spots = [];
+  for (let gz = -14; gz < 240; gz += RIDGE_STEP) for (let gx = -230; gx < 230; gx += RIDGE_STEP) {
+    const x = gx + (rand() - 0.5) * RIDGE_STEP * 0.8, z = gz + (rand() - 0.5) * RIDGE_STEP * 0.8;
+    const r1 = rand(), r2 = rand();
+    const dE = Math.hypot(x - Math.min(Math.max(x, P.x0), P.x1), z - Math.min(Math.max(z, P.z0), P.z1)); // 離平台邊緣
+    if (dE < 2.5 || z < -13) continue; // 平台上（場外樹林在 layout.js）與北側（slopeTreeSpots）不種
+    const d = Math.hypot(x, z - 10);
+    if (d > 230 || r1 > 1.3 - d / 200) continue; // 越遠越稀疏，交給 shader 的樹冠
+    const y = heightAt(x, z);
+    if (y < SEA + 4 || !seen(x, y + 7, z)) continue;
+    // 東西兩側靠北的樹會進到看海灣的視野：跟崖下的樹用同一個規則壓低
+    const dx = x - EYE.x, dz = z - EYE.z, de = Math.hypot(dx, dz), az = Math.abs(Math.atan2(dx, -dz));
+    let maxH = 99;
+    if (az < 1.6) maxH = EYE.y + Math.tan((az < 1.25 ? -0.03 : 0.15) - r2 * 0.07) * de - y - 2;
+    if (maxH < 5) continue;
+    spots.push([x, y, z, maxH, false]);
+  }
+  return spots;
+}
+const RIDGE_STEP = 7.5;
 
 
 // ---------- 夜景燈火 ----------

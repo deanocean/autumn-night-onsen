@@ -803,12 +803,12 @@ export function buildWorld(scene) {
       rc.add(M.plaster, boxGeo(hx * 2 - 0.04, yt - yb, hz * 2 - 0.04, tx, (yt + yb) / 2, tz));             // 白壁
       rc.add(dw, boxGeo(hx * 2 + 0.16, 0.12, hz * 2 + 0.16, tx, yt, tz));                                  // 桁
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) rc.add(DARK1, boxGeo(0.12, yt - yb, 0.12, tx + sx * (hx - 0.03), (yt + yb) / 2, tz + sz * (hz - 0.03)));
-      // 四面的格子窗：和紙在裡、細密的直格在外
+      // 四面的格子窗：和紙在裡、直格在外（約 22 公分一格，2026-11-18 使用者覺得 10 公分太密）
       for (const [ax, az, hw, off] of [[1, 0, hx - 0.3, hz], [0, 1, hz - 0.26, hx]]) for (const sd of [-1, 1]) {
         const ox = tx + az * sd * off, oz = tz + ax * sd * off, ym = (wy0 + wy1) / 2, wh = wy1 - wy0;
         const bx = (len, h, t, u, y, out) => boxGeo(ax ? len : t, h, az ? len : t, ox + ax * u + az * sd * out, y, oz + az * u + ax * sd * out);
         rc.add(SHOJI_UP, bx(hw * 2, wh, 0.02, 0, ym, 0));
-        const nb = Math.round((hw * 2) / 0.1);
+        const nb = Math.round((hw * 2) / 0.22);
         for (let k = 1; k < nb; k++) rc.add(dw, bx(0.022, wh, 0.03, -hw + (k / nb) * hw * 2, ym, 0.02));
         for (const y of [wy0 + wh / 3, wy0 + (wh * 2) / 3]) rc.add(dw, bx(hw * 2, 0.018, 0.024, 0, y, 0.02));
         for (const y of [wy0 - 0.03, wy1 + 0.03]) rc.add(dw, bx(hw * 2 + 0.16, 0.06, 0.08, 0, y, 0.03)); // 窗台與楣
