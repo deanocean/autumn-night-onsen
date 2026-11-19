@@ -554,10 +554,8 @@ function buildLights(radii, H, W, cos, sin, rand) {
     hamlets.push([x, z, 1, 1]);
   }
   // 4) 灣裡的船（桅燈＋舷燈）
-  // 最近的那艘（[320, -930]）正面望過去太突兀，拿掉；亂數照抽三次，後面的燈位置與明滅才不會跟著變
-  for (const [x, z, gone] of [[320, -930, 1], [-560, -2650], [980, -3050], [-150, -5300], [-1250, -1350], [1700, -1500], [150, -2300], [-300, -3600], [700, -1800]]) {
+  for (const [x, z] of [[-560, -2650], [980, -3050], [-150, -5300], [-1250, -1350], [1700, -1500], [150, -2300], [-300, -3600], [700, -1800]]) {
     if (heightAt(x, z) > SEA - 2) continue;
-    if (gone) { rand(); rand(); rand(); continue; }
     add(x, SEA + 5, z, LCOL.white, 0.6, true);
     add(x + 7, SEA + 3, z + 2, rand() < 0.5 ? LCOL.green : LCOL.red, 0.3, true);
   }
