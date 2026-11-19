@@ -137,7 +137,8 @@ document.addEventListener('pointerlockchange', () => {
 addEventListener('keydown', (e) => {
   if (!player.enabled || e.repeat) return;
   if (e.target.closest && e.target.closest('.dev-panel')) return; // 在面板裡打字
-  if (e.code === 'Backquote') { toggleDev(); return; }
+  // 美式鍵盤是 Tab 上面那顆；日文（JIS）鍵盤沒有這顆，` 要按 Shift + @（P 右邊），所以也看輸入的字元
+  if (e.code === 'Backquote' || e.key === '`' || e.key === '｀') { toggleDev(); return; }
   if (e.code === 'KeyT') toggleTime();
   // 觀景點：V 下一個；觀景中按移動鍵回到原位，其他的鍵（除了 T、N、H）先不理
   if (e.code === 'KeyV' && !guides.top && !interact.mode && !player.anchor) views.next();

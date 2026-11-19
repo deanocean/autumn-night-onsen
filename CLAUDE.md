@@ -12,7 +12,7 @@
 - 版本管理用 git：每完成一個段落就 commit。
 - **量卡頓**：`node tools/perf.js`（進場與日夜切換時超過 40 ms 的畫格、已編譯的 shader 數）。
 - **自己看畫面**：`node tools/shot.js [--dusk|--night] [--top] 名稱:x,z,yaw,pitch ...`（無頭 Chrome，自己起伺服器；輸出在 `tools/shots/`，不進版本庫，每次執行會自動刪掉裡面超過兩小時的舊檔，要留的圖請另存到別處；首次使用先 `cd tools && npm install`）。yaw 0 朝北、π 朝南、正值往左（西）轉；`--top` 拍鳥瞰；`--eval=程式碼` 會在拍照前於頁面內執行（例如熄燈、`__onsen.camera.fov=24` 拉長焦看小物）；不給視角時拍預設五張。改完畫面相關的東西一定要自己拍照檢查，白天、黃昏、夜晚都看；終端若印出 `pageerror`／`console error` 代表程式壞了。原圖是 3200×1800，檢視前先用 `sips -Z 1300` 縮小。
-- **開發者面板**：進場後按 ` 鍵開關（`js/dev.js`，lil-gui；第一次按才載入，平常零負擔）。只放即時生效的參數，重新整理就還原；使用者調好後按「複製變更」把「檔案・名稱：原值 → 新值」貼過來，由 Claude 寫回程式。可調的常數已改成各檔匯出的物件（`daynight.js` 的 `KEY`／`NUM`／`STEAM`、`lights.js` 的 `POWER`／`GLOW`、`world.js` 的 `LOOK`、`audio.js` 的 `MIX`、`player.js` 的 `MOVE`），**新增可調參數時沿用這個做法並在 `dev.js` 登錄**。自動測試可用 `--eval=__onsen.toggleDev()`。
+- **開發者面板**：進場後按 ` 鍵開關（日文鍵盤是 Shift + @；`js/dev.js`，lil-gui；第一次按才載入，平常零負擔）。只放即時生效的參數，重新整理就還原；使用者調好後按「複製變更」把「檔案・名稱：原值 → 新值」貼過來，由 Claude 寫回程式。可調的常數已改成各檔匯出的物件（`daynight.js` 的 `KEY`／`NUM`／`STEAM`、`lights.js` 的 `POWER`／`GLOW`、`world.js` 的 `LOOK`、`audio.js` 的 `MIX`、`player.js` 的 `MOVE`），**新增可調參數時沿用這個做法並在 `dev.js` 登錄**。自動測試可用 `--eval=__onsen.toggleDev()`。
 - 使用者也會用截圖回報畫面問題。
 - **要給使用者看的截圖放在專案的 `review/`**（不進版本庫）；放在專案外的暫存資料夾使用者打不開。拍高處的角度：`--eval=__onsen.views.set(0～4)`（觀景點），或 `--eval=__onsen.player.eye=__onsen.player.eyeTarget=高度`。
 - **看遠景的構圖**：`node tools/pano.js [--map=半徑]`（不開瀏覽器，直接用 `terrain.js` 畫出從望景台看的山形剪影 `pano.png` 與俯視地圖 `map.png`，約 5 秒；調山脊、水域、聚落位置時先用它，定案再用 shot.js）。
