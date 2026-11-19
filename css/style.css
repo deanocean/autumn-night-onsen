@@ -48,6 +48,7 @@ html, body {
   margin: 0 0 0.75rem;
   font-size: 0.8rem;
   letter-spacing: 0.3em;
+  text-indent: 0.3em; /* 抵銷最後一字後的字距，才會真正置中 */
   color: var(--accent);
 }
 
