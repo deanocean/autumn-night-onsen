@@ -83,14 +83,6 @@ Then open the printed `localhost` address. Three.js 0.170 is loaded from the jsD
 
 Use a desktop browser. A recent Chrome on a machine with a decent GPU is recommended; the scene is tuned for image quality, not for mobile.
 
-## Deploying to GitHub Pages
-
-The site is fully static, so no build is needed:
-
-1. Push the repository to GitHub.
-2. Go to **Settings → Pages → Build and deployment**, choose **Deploy from a branch**, then select `main` and `/ (root)`.
-3. After a minute the site is live at `https://<username>.github.io/<repo>/`. Put that address in the *Live demo* link above.
-
 ## Project structure
 
 ```
