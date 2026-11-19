@@ -70,7 +70,7 @@ html:not(.i18n) #intro > * { visibility: hidden; }
 #lang button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .panel-inner {
-  width: min(30rem, calc(100% - 3rem));
+  width: min(40rem, calc(100% - 3rem)); /* 三種語言共用：按鍵說明兩欄都放得下一行 */
   text-align: center;
 }
 
@@ -90,8 +90,7 @@ h1 {
   text-indent: 0.25em;
 }
 html:lang(en) h1 { letter-spacing: 0.08em; text-indent: 0.08em; }
-/* 英文、日文的字串比中文長：開始畫面放寬；日文依詞組換行，不讓單一假名掉到下一行 */
-html:lang(en) .panel-inner, html:lang(ja) .panel-inner { width: min(38rem, calc(100% - 3rem)); }
+/* 日文依詞組換行，不讓單一假名掉到下一行；英文、日文的說明面板比中文寬 */
 html:lang(ja) body { word-break: auto-phrase; }
 html:lang(en) #help, html:lang(ja) #help { width: min(50rem, calc(100% - 3rem)); }
 
@@ -115,12 +114,13 @@ html:lang(en) #help, html:lang(ja) #help { width: min(50rem, calc(100% - 3rem));
 }
 .keys div { display: flex; gap: 0.8rem; align-items: baseline; }
 .keys dt {
-  min-width: 4.6rem;
+  min-width: 3.8rem; /* 剛好放得下 W A S D，把寬度留給說明 */
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 0.78rem;
   color: var(--accent);
 }
 .keys dd { margin: 0; color: var(--ink-dim); }
+.keys .wide { grid-column: 1 / -1; } /* H 說明最後一行（開發者面板）橫跨兩欄 */
 
 #start {
   padding: 0.85rem 2.6rem;
@@ -242,7 +242,7 @@ body.quiet #time, body.quiet #sound, body.quiet #helpbtn { opacity: 0; pointer-e
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  width: min(38rem, calc(100% - 3rem));
+  width: min(40rem, calc(100% - 3rem));
   max-height: calc(100% - 3rem);
   overflow-y: auto;
   padding: 1.6rem 2rem 1.3rem;
