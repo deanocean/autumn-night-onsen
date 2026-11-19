@@ -45,6 +45,16 @@ export function wood(color, grain = 0, plank = 0, weather = 0.45, plankY = false
 const CEDAR = 0x7a5740, CEDAR_DARK = 0x5c4433, HINOKI = 0xb08a5c, BOARD = 0x8a6646;
 const DECK_WOOD = 0x6f5d4c; // 望景台：日曬雨淋後褪成灰褐的木板
 const SHU = 0xb5351f;        // 二樓高欄的朱紅
+// 望樓的尺寸（公尺；建幾何時讀一次，不能即時調）。屋脊高約 7.15、大棟頂約 7.56
+const TOWER = {
+  w: 0.82,           // 白壁窗段的半寬（正方形）
+  base: [1.3, 1.15], // 腰底部的半寬（x 沿屋脊、z）；腰往上收到 w + 0.1
+  yb: 7.85,          // 腰頂（縁板）的高度
+  drumH: 1.1,        // 窗段的高度
+  deck: 1.15,        // 縁板的半寬（朱欄在內側 5 公分）
+  eave: 1.6,         // 寶形屋頂簷口的半寬
+  pitch: 0.75,       // 屋頂坡度（升／進）
+};
 // 窗紙與提燈的夜晚亮度（每畫一次都會讀，開發者面板可即時調）
 export const LOOK = {
   SHOJI_NIGHT: 0.95,  // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
@@ -529,7 +539,7 @@ export function buildWorld(scene) {
   // ---------- 湯屋與簷廊（道後溫泉本館風格） ----------
   // 骨架是道後溫泉本館，配色與細部融合了四万溫泉積善館等老湯宿共通的元素（6D3）。
   // 由下往上層層疊起：深簷的下屋與簷廊、入口的唐破風（緑青銅板）與蟇股、圍著朱紅高欄的二樓（簷下一排小提燈）、
-  // 灰黑本瓦的入母屋大屋頂（正面前後兩層千鳥破風）、屋脊中央的小望樓（白壁、格子窗、緑青的寄棟屋頂）。
+  // 灰黑本瓦的入母屋大屋頂（正面前後兩層千鳥破風）、屋脊中央的小望樓（往下張開的腰、白壁格子窗、朱紅小高欄、緑青的寶形屋頂）。
   // 不旋轉的零件收在 yg 最後依材質合併；屋頂上的東西收在 roofG。
   const lamps = []; // 簷下吊燈籠與入口提燈，交給 lights.js 做成光源
   {
@@ -796,19 +806,33 @@ export function buildWorld(scene) {
     chidori(1.3, zF + 0.15, 0.55, 0.8);
     chidori(2.3, zF + 1.1, 0.55, 0.9);
 
-    // --- 望樓：坐在屋脊中央的小樓。下半是下見板，上半白壁、四面格子窗（夜裡透暖黃的光），緑青銅板的寄棟屋頂，頂上一顆寶珠 ---
+    // --- 望樓：坐在屋脊中央的小樓（7C）。剪影由下往上是「往下張開的腰 → 窄的白壁窗段 → 朱紅小高欄 → 深簷的陡寶形屋頂 → 高的頂飾」。
+    // 窗段比屋頂窄很多，簷才挑得深；腰張開、頂飾拉高，跟舊的塔樓一樣活潑，但不用紅玻璃與白鷺（振鷺閣的招牌）
     {
-      const tx = doorX, tz = zc, hx = 1.2, hz = 0.82, y0 = 6.3, yb = 7.42, wy0 = 7.72, wy1 = 8.4, yt = 8.62;
-      const ry = yt + 0.08, ex = hx + 0.62, ez = hz + 0.62, rl = ex - ez, apex = ry + ez * 0.56;
-      const dw = wood(CEDAR_DARK, 0);
-      rc.add(wood(CEDAR, 0, 0.15, 0.6, true), boxGeo(hx * 2, yb - y0, hz * 2, tx, (y0 + yb) / 2, tz));    // 腰：下見板
-      rc.add(dw, boxGeo(hx * 2 + 0.14, 0.09, hz * 2 + 0.14, tx, yb, tz));                                  // 見切
-      rc.add(M.plaster, boxGeo(hx * 2 - 0.04, yt - yb, hz * 2 - 0.04, tx, (yt + yb) / 2, tz));             // 白壁
-      rc.add(dw, boxGeo(hx * 2 + 0.16, 0.12, hz * 2 + 0.16, tx, yt, tz));                                  // 桁
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) rc.add(DARK1, boxGeo(0.12, yt - yb, 0.12, tx + sx * (hx - 0.03), (yt + yb) / 2, tz + sz * (hz - 0.03)));
+      const T = TOWER, tx = doorX, tz = zc, W = T.w, y0 = 6.3, yb = T.yb, yt = yb + T.drumH;
+      const wy0 = yb + 0.3, wy1 = yt - 0.17, ry = yt + 0.08, re = T.eave, apex = ry + re * T.pitch;
+      const dw = wood(CEDAR_DARK, 0), dz = wood(CEDAR_DARK, 2);
+      // 腰：往下張開的下見板（底部埋在大屋頂裡）
+      {
+        const [bx0, bz0] = T.base, tw = W + 0.1, pos = [];
+        const bot = [[-bx0, -bz0], [bx0, -bz0], [bx0, bz0], [-bx0, bz0]], top = [[-tw, -tw], [tw, -tw], [tw, tw], [-tw, tw]];
+        for (let i = 0; i < 4; i++) {
+          const j = (i + 1) % 4, b0 = [bot[i][0], y0, bot[i][1]], b1 = [bot[j][0], y0, bot[j][1]], t0 = [top[i][0], yb, top[i][1]], t1 = [top[j][0], yb, top[j][1]];
+          pos.push(...b0, ...t0, ...t1, ...b0, ...t1, ...b1);
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+        g.translate(tx, 0, tz).computeVertexNormals();
+        rc.add(wood(CEDAR, 0, 0.15, 0.6, true), g);
+      }
+      rc.add(dw, boxGeo((W + 0.17) * 2, 0.09, (W + 0.17) * 2, tx, yb - 0.04, tz));                         // 見切
+      // 窗段：白壁、四隅的柱、上緣的桁
+      rc.add(M.plaster, boxGeo(W * 2 - 0.04, yt - yb, W * 2 - 0.04, tx, (yt + yb) / 2, tz));
+      rc.add(dw, boxGeo(W * 2 + 0.16, 0.12, W * 2 + 0.16, tx, yt, tz));
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) rc.add(DARK1, boxGeo(0.12, yt - yb, 0.12, tx + sx * (W - 0.03), (yt + yb) / 2, tz + sz * (W - 0.03)));
       // 四面的格子窗：和紙在裡、直格在外（約 22 公分一格，2026-11-18 使用者覺得 10 公分太密）
-      for (const [ax, az, hw, off] of [[1, 0, hx - 0.3, hz], [0, 1, hz - 0.26, hx]]) for (const sd of [-1, 1]) {
-        const ox = tx + az * sd * off, oz = tz + ax * sd * off, ym = (wy0 + wy1) / 2, wh = wy1 - wy0;
+      for (const [ax, az] of [[1, 0], [0, 1]]) for (const sd of [-1, 1]) {
+        const hw = W - 0.26, ox = tx + az * sd * W, oz = tz + ax * sd * W, ym = (wy0 + wy1) / 2, wh = wy1 - wy0;
         const bx = (len, h, t, u, y, out) => boxGeo(ax ? len : t, h, az ? len : t, ox + ax * u + az * sd * out, y, oz + az * u + ax * sd * out);
         rc.add(SHOJI_UP, bx(hw * 2, wh, 0.02, 0, ym, 0));
         const nb = Math.round((hw * 2) / 0.22);
@@ -817,21 +841,54 @@ export function buildWorld(scene) {
         for (const y of [wy0 - 0.03, wy1 + 0.03]) rc.add(dw, bx(hw * 2 + 0.16, 0.06, 0.08, 0, y, 0.03)); // 窗台與楣
         for (const u of [-hw - 0.03, hw + 0.03]) rc.add(DARK1, bx(0.06, wh, 0.06, u, ym, 0.02));
       }
-      // 寄棟屋頂（四面同一個斜率，銅板的排才會在隅棟對齊）
-      const c00 = P3(tx - ex, ry, tz - ez), c10 = P3(tx + ex, ry, tz - ez), c01 = P3(tx - ex, ry, tz + ez), c11 = P3(tx + ex, ry, tz + ez);
-      const r0 = P3(tx - rl, apex, tz), r1 = P3(tx + rl, apex, tz);
-      sheetPlane(rc, [c00, c10, r1, r0]);
-      sheetPlane(rc, [c01, c11, r1, r0]);
-      sheetPlane(rc, [c00, c01, r0]);
-      sheetPlane(rc, [c10, c11, r1]);
-      rc.add(M.patina, boxGeo(ex * 2 + 0.04, 0.05, ez * 2 + 0.04, tx, ry - 0.03, tz));   // 簷口的唐草（銅板收邊）
-      rc.add(dw, boxGeo(ex * 2 - 0.12, 0.06, ez * 2 - 0.12, tx, ry - 0.08, tz));         // 軒裏
-      for (let x = -ex + 0.22; x < ex - 0.1; x += 0.3) rc.add(dw, boxGeo(0.05, 0.06, ez * 2 - 0.2, tx + x, ry - 0.13, tz)); // 垂木
-      for (const [r, cs] of [[r0, [c00, c01]], [r1, [c10, c11]]]) for (const cn of cs) rc.add(M.patina, rodGeo(r.clone().setY(apex + 0.02), cn.clone().setY(ry + 0.03), 0.04, 6));
-      rc.add(M.patina, boxGeo(rl * 2 + 0.36, 0.13, 0.17, tx, apex + 0.03, tz));           // 棟
-      rc.add(M.patina, boxGeo(0.3, 0.1, 0.3, tx, apex + 0.13, tz));                       // 露盤
-      rc.add(M.patina, new THREE.SphereGeometry(0.105, 14, 10).translate(tx, apex + 0.27, tz));
-      rc.add(M.patina, new THREE.ConeGeometry(0.06, 0.16, 12).translate(tx, apex + 0.4, tz)); // 寶珠的尖
+      // 縁與朱紅小高欄：縁板繞窗段一圈（底下的腕木從腰頂伸出），高欄的漆色與做法同二樓
+      {
+        const D = T.deck, R = D - 0.05, top = yb + 0.4;
+        rc.add(wood(BOARD, 0, 0.14, 0.4), boxGeo(D * 2, 0.045, D * 2, tx, yb + 0.025, tz));                 // 縁板
+        for (const s of [-1, 1]) for (const u of [-0.6, 0, 0.6]) {
+          const out = (W + 0.1 + D) / 2, len = D - W - 0.1;
+          rc.add(dz, boxGeo(0.08, 0.1, len, tx + u, yb - 0.06, tz + s * out));                             // 腕木
+          rc.add(dw, boxGeo(len, 0.1, 0.08, tx + s * out, yb - 0.06, tz + u));
+        }
+        for (const s of [-1, 1]) {
+          // 地覆、平桁、架木（架木在四隅交叉伸出一點）
+          for (const [y, h, d, ext] of [[yb + 0.09, 0.05, 0.055, 0], [yb + 0.27, 0.045, 0.05, 0], [top, 0.055, 0.075, 0.1]]) {
+            rc.add(wood(SHU, 0), boxGeo(R * 2 + ext * 2, h, d, tx, y, tz + s * R));
+            rc.add(wood(SHU, 2), boxGeo(d, h, R * 2 + ext * 2, tx + s * R, y, tz));
+          }
+          // 親柱（四隅與每面正中）與平桁下的斗束
+          for (const u of [-R, 0, R]) for (const [px, pz] of [[u, s * R], [s * R, u]]) rc.add(wood(SHU, 1), boxGeo(0.06, top - yb, 0.06, tx + px, (top + yb) / 2, tz + pz));
+          for (let u = -R + 0.2; u < R - 0.1; u += 0.2) {
+            if (Math.abs(u) < 0.06) continue;
+            for (const [px, pz] of [[u, s * R], [s * R, u]]) rc.add(wood(SHU, 1), boxGeo(0.028, 0.16, 0.028, tx + px, yb + 0.185, tz + pz));
+          }
+        }
+        // 四隅親柱頂上的擬寶珠（緑青）
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+          rc.add(M.patina, new THREE.CylinderGeometry(0.04, 0.045, 0.05, 10).translate(tx + sx * R, top + 0.05, tz + sz * R));
+          rc.add(M.patina, new THREE.SphereGeometry(0.045, 10, 8).translate(tx + sx * R, top + 0.1, tz + sz * R));
+        }
+      }
+      // 寶形屋頂（四片三角形，四面同一個斜率，銅板的排在隅棟對齊）
+      const A = P3(tx, apex, tz);
+      const c00 = P3(tx - re, ry, tz - re), c10 = P3(tx + re, ry, tz - re), c01 = P3(tx - re, ry, tz + re), c11 = P3(tx + re, ry, tz + re);
+      for (const [a, b] of [[c00, c10], [c10, c11], [c11, c01], [c01, c00]]) sheetPlane(rc, [a, b, A]);
+      rc.add(M.patina, boxGeo(re * 2 + 0.04, 0.05, re * 2 + 0.04, tx, ry - 0.03, tz));   // 簷口的唐草（銅板收邊）
+      rc.add(dw, boxGeo(re * 2 - 0.12, 0.06, re * 2 - 0.12, tx, ry - 0.08, tz));         // 軒裏
+      // 垂木：四面各自垂直於簷口，到隅的地方交給另一面
+      for (let u = -re + 0.2; u < re - 0.1; u += 0.28) for (const s of [-1, 1]) {
+        const v0 = Math.max(W + 0.1, Math.abs(u)), len = re - 0.06 - v0;
+        if (len < 0.08) continue;
+        const v = s * (v0 + len / 2);
+        rc.add(dz, boxGeo(0.05, 0.06, len, tx + u, ry - 0.13, tz + v));
+        rc.add(dw, boxGeo(len, 0.06, 0.05, tx + v, ry - 0.13, tz + u));
+      }
+      for (const cn of [c00, c10, c01, c11]) rc.add(M.patina, rodGeo(A.clone().setY(apex + 0.02), cn.clone().setY(ry + 0.03), 0.04, 6)); // 隅棟
+      // 頂飾：露盤、伏鉢、請花、寶珠（一條旋轉剖面）
+      rc.add(M.patina, boxGeo(0.36, 0.1, 0.36, tx, apex + 0.02, tz));
+      const fin = [[0, 0], [0.13, 0], [0.135, 0.05], [0.125, 0.1], [0.1, 0.145], [0.06, 0.17], [0.035, 0.19], [0.05, 0.215], [0.1, 0.25], [0.06, 0.27],
+        [0.032, 0.29], [0.07, 0.33], [0.1, 0.39], [0.09, 0.45], [0.05, 0.51], [0.02, 0.56], [0, 0.64]].map(([r, y]) => new THREE.Vector2(r, y));
+      rc.add(M.patina, new THREE.LatheGeometry(fin, 16).translate(tx, apex + 0.07, tz));
     }
 
     // --- 銅色的雨樋：大屋簷正面的橫樋，兩端的集水斗與豎樋 ---

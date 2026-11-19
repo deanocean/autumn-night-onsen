@@ -8,7 +8,7 @@ import { t as tr } from './i18n.js'; // 這裡的 t 是運鏡的時間
 const VIEWS = [
   { name: 'view.bathhouse', a: [7, 6.5, -6], b: [3.5, 7.5, -8.5], look: [-4.5, 4.6, 12], fov: 50 },
   { name: 'view.roofs', a: [-13, 11.5, 21], b: [-9, 12.5, 22], look: [0, 2, -12], fov: 55 },
-  { name: 'view.tower', a: [-0.5, 4, -2], b: [-3, 4.5, -2], look: [-4.5, 8.3, 13.5], fov: 20 },
+  { name: 'view.tower', a: [-0.5, 4, -2], b: [-3, 4.5, -2], look: [-4.5, 8.6, 13.5], fov: 20 },
   { name: 'view.cliff', a: [9, 8.5, -17], b: [3, 9.5, -18], look: [-2.5, 1.5, 4], fov: 52 },
   { name: 'view.karahafu', a: [-9, 3.2, 4.6], b: [-7.2, 3.4, 5.4], look: [-4.6, 3.9, 8.6], fov: 30 },
 ];
