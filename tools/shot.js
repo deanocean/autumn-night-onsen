@@ -3,7 +3,7 @@
 // 用法：node tools/shot.js [--dusk|--night] [--top] [--lang=zh|en|ja] [--intro] [--w=1600 --h=900] 名稱:x,z,yaw,pitch [...]
 //   --lang：介面語言（預設 zh；不指定時無頭 Chrome 會照瀏覽器語言變成英文）。--intro：只拍開始畫面（檔名 intro-語言.jpg）。
 //   yaw 0 朝北（-z，山谷），Math.PI 朝南（湯屋）；pitch 正值仰、負值俯。
-//   不給視角時拍預設的五張。輸出在 tools/shots/（不進版本庫）。
+//   不給視角時拍預設的五張。輸出在 tools/shots/（不進版本庫），檔名是「名稱-時段.jpg」（白天不加；名稱已以時段結尾也不加）。
 //   每次執行會先刪掉 tools/shots/ 裡超過兩小時的舊檔，資料夾只留這一輪工作的圖；要長期保留的請另存到別處。
 const http = require('http');
 const fs = require('fs');
@@ -102,7 +102,9 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms));
         pl.pos.x = x; pl.pos.z = z; pl.yaw = yaw; pl.pitch = pitch; pl.vel.set(0, 0);
       }, x, z, yaw, pitch);
       await wait(1200);
-      const file = path.join(OUT, `${name}${phase !== 'day' ? '-' + phase : ''}.jpg`);
+      // 黃昏、夜晚在檔名後加時段；名稱本身已經以該時段結尾（如 bay-night）就不再加
+      const tag = phase !== 'day' && !name.endsWith('-' + phase) ? '-' + phase : '';
+      const file = path.join(OUT, `${name}${tag}.jpg`);
       await page.screenshot({ path: file, type: 'jpeg', quality: 88 });
       console.log('saved', file);
     }
