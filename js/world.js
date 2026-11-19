@@ -139,7 +139,7 @@ function rock(g, rand, x, z, r, h, baseY, detail) {
   return o;
 }
 
-// 鳥瞰時要隱藏的東西（屋頂、樹冠）
+// 鳥瞰時要隱藏的東西（東屋與簷廊下屋的屋頂、樹冠、野点傘；湯屋大屋頂不藏）
 export const OVERHEAD = [];
 
 // 一片屋面：杮葺、底下的野地板與一根根垂木。side 表示簷口在本地座標的哪一端
@@ -530,7 +530,7 @@ export function buildWorld(scene) {
   // 骨架是道後溫泉本館，配色與細部融合了四万溫泉積善館等老湯宿共通的元素（6D3）。
   // 由下往上層層疊起：深簷的下屋與簷廊、入口的唐破風（緑青銅板）與蟇股、圍著朱紅高欄的二樓（簷下一排小提燈）、
   // 灰黑本瓦的入母屋大屋頂（正面前後兩層千鳥破風）、屋脊中央的小望樓（白壁、格子窗、緑青的寄棟屋頂）。
-  // 不旋轉的零件收在 yg 最後依材質合併；屋頂上的東西收在 roofG（鳥瞰時整組隱藏）。
+  // 不旋轉的零件收在 yg 最後依材質合併；屋頂上的東西收在 roofG。
   const lamps = []; // 簷下吊燈籠與入口提燈，交給 lights.js 做成光源
   {
     const Y = L.YUYA, E = L.ENGAWA;
@@ -540,8 +540,7 @@ export function buildWorld(scene) {
     const w = Y.x1 - Y.x0, cx = (Y.x0 + Y.x1) / 2, fz = Y.z0;
     const DOOR = 3, ROUND = 4;
     const yg = new THREE.Group(), roofG = new THREE.Group(), rc = collector();
-    world.add(roofG);
-    OVERHEAD.push(roofG);
+    world.add(roofG); // 鳥瞰時不隱藏：湯屋沒有室內，拿掉屋頂只會露出白壁盒子的頂面
     const DARK1 = wood(CEDAR_DARK, 1);
 
     // 牆身（白壁）與石砌基座
