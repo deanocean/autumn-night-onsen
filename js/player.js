@@ -1,7 +1,13 @@
 import * as THREE from 'three';
 import { groundY, inWater, circles, boxes, BOUNDS, START, POOL } from './layout.js';
 
-const EYE = 1.62;
+// 移動與視角（每格都會讀，開發者面板可即時調）
+export const MOVE = {
+  walk: 2.3,      // 步行速度（m/s）
+  run: 4.2,       // 按住 Shift 快走
+  eye: 1.62,      // 站立時的視線高度
+  look: 0.0021,   // 滑鼠鎖定時的轉頭靈敏度（拖曳模式照比例放大到 0.004）
+};
 const RADIUS = 0.34;
 
 export class Player {
@@ -18,12 +24,13 @@ export class Player {
     this.bob = 0;
     this.wading = false;
     // 坐下、泡湯等姿勢（由 interact.js 設定）
-    this.eye = EYE;        // 目前的視線高度（相對腳下）
+    this.eye = MOVE.eye;        // 目前的視線高度（相對腳下）
     this.eyeTarget = null; // 要降到的視線高度；null = 站立
     this.frozen = false;   // 不能走動（仍可轉頭）
     this.anchor = null;    // { x, z, release }：被帶往這個位置，不做碰撞；release 為 true 時到位後放開
 
     addEventListener('keydown', (e) => {
+      if (e.target.closest && e.target.closest('.dev-panel')) return; // 在開發者面板裡打字
       if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
       this.keys.add(e.code);
     });
@@ -34,7 +41,7 @@ export class Player {
       if (!this.enabled) return;
       const locked = document.pointerLockElement === dom;
       if (!locked && !this.dragging) return;
-      const k = locked ? 0.0021 : 0.004;
+      const k = locked ? MOVE.look : MOVE.look * (0.004 / 0.0021);
       this.yaw -= e.movementX * k;
       this.pitch = Math.max(-1.45, Math.min(1.5, this.pitch - e.movementY * k));
     });
@@ -59,7 +66,7 @@ export class Player {
     f /= len; s /= len;
 
     this.wading = inWater(this.pos.x, this.pos.z);
-    let speed = k.has('ShiftLeft') || k.has('ShiftRight') ? 4.2 : 2.3;
+    let speed = k.has('ShiftLeft') || k.has('ShiftRight') ? MOVE.run : MOVE.walk;
     if (this.wading) speed *= 0.55;
 
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
@@ -122,7 +129,7 @@ export class Player {
     this.bob += dt * moving * 3.1;
     const bobY = Math.sin(this.bob * 2) * 0.022 * Math.min(1, moving / 2);
 
-    this.eye += ((this.eyeTarget ?? EYE) - this.eye) * (1 - Math.exp(-dt * 3.5));
+    this.eye += ((this.eyeTarget ?? MOVE.eye) - this.eye) * (1 - Math.exp(-dt * 3.5));
     this.camera.position.set(x, this.pos.y + this.eye + bobY, z);
     this.camera.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
   }

@@ -4,9 +4,11 @@
 import * as THREE from 'three';
 import { G } from './env.js';
 import { MATERIALS } from './world.js';
+import { GLOW } from './lights.js';
 
 const C = (hex) => new THREE.Color(hex);
-const KEY = {
+// KEY／NUM 每次重算都會讀，開發者面板可即時改（改完呼叫 refresh()）
+export const KEY = {
   //            白天            黃昏            夜晚
   skyTop:     [C(0x3f7fca), C(0x2b3f86), C(0x04070f)],
   skyHorizon: [C(0xcfdbe8), C(0xf0a37a), C(0x122039)],
@@ -17,12 +19,14 @@ const KEY = {
   hemiSky:    [C(0xcfe0f5), C(0xa99ac0), C(0x2c3a5c)],
   hemiGround: [C(0x8a7862), C(0x7a5648), C(0x10131a)],
 };
-const NUM = {
+export const NUM = {
   sunI:   [2.7, 1.5, 0.10],
   hemiI:  [1.25, 0.62, 0.30],
   expo:   [1.0, 1.0, 1.05],
   fogFar: [3000, 2600, 3500],
 };
+// 蒸氣濃度：白天是 base，到夜晚多 night
+export const STEAM = { base: 1, night: 0.25 };
 const SUN_DAY = new THREE.Vector3(-0.5, 0.72, 0.48).normalize();
 // 黃昏的太陽：正北偏西一點，剛好落在水道通往外海的缺口上方、貼著海平線；之後沉到海平線下
 const SUN_DUSK = new THREE.Vector3(-0.12, 0.04, -0.99).normalize();
@@ -74,12 +78,12 @@ export function createDayNight({ scene, renderer, sun, hemi, sky, lights }) {
     sky.uniforms.uCloud.value = 1 - n * 0.85;
     G.sunSpec.value = sunUp * (1 - 0.5 * sat(n * 2));
     G.caustic.value = day;
-    G.steamDensity.value = 1 + n * 0.25;
+    G.steamDensity.value = STEAM.base + n * STEAM.night;
     renderer.toneMappingExposure = num3(NUM.expo, n);
 
     // 燈火隨天色暗下來而亮起：到黃昏時已經全亮
     const lit = sat((n - 0.2) / 0.28);
-    MATERIALS.paper.emissiveIntensity = 0.12 + lit * 1.9;
+    MATERIALS.paper.emissiveIntensity = 0.12 + lit * GLOW.paper;
     lights.setLevel(lit);
   }
   apply();
@@ -99,6 +103,10 @@ export function createDayNight({ scene, renderer, sun, hemi, sky, lights }) {
     next() { go((phase + 1) % 3); return PHASES[phase]; },
     // p：'day'／'dusk'／'night'
     set(p, instant = false) { go(Math.max(0, PHASES.indexOf(p)), instant); },
+    // 開發者面板用：直接停在某個 night 值（0～1），時段取最近的那一段
+    scrub(n) { phase = Math.round(n * 2); from = to = n; t = 1; apply(); },
+    // 改了 KEY／NUM 等數值後重算目前的狀態
+    refresh() { apply(); },
     update(dt) {
       if (t >= 1) return;
       t = Math.min(1, t + dt / dur);

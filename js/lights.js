@@ -4,14 +4,21 @@
 import * as THREE from 'three';
 import { G, LAMP_N } from './env.js';
 
+// 各類燈的亮度（點光源的強度；簷下吊燈籠與提燈沒有點光源，只影響水面與蒸氣被染亮的程度）。
+// sync() 每次都從這裡讀，開發者面板可即時調。
+export const POWER = { stone: 5.5, andon: 4.0, ashimoto: 1.5, engawa: 9, hanging: 2.0 };
+// GLOW.paper：夜晚和紙發光的強度；GLOW.tint：燈把水面與蒸氣染亮的係數
+export const GLOW = { paper: 1.9, tint: 0.11 };
+
 // lanterns：props.js 的石燈籠與行燈；hangingLamps：world.js 的簷下吊燈籠與提燈。
 // 每盞燈有自己的和紙材質（mat）與 on 旗標；改 on 之後由 update() 讓該盞的光與紙面一起淡出或亮起
 // （k 是目前的亮度比例；要立刻到位就呼叫 snap()）。hl 是被注視時的微亮（interact.js 設定）。
 // 可熄的燈（有 paper 的）全部熄掉時，窗內的光（engawa）也跟著暗下來。
 export function createLights(scene, lanterns, hangingLamps) {
   const lamps = [];
-  const add = (x, y, z, power, real, kind, src = null) => {
-    const lamp = { x, y, z, power, kind, on: true, k: 1, hl: 0, light: null, mat: src?.mat || null, paper: src?.paper || null, group: src?.group || null };
+  // pk：讀 POWER 的哪一格
+  const add = (x, y, z, pk, real, kind, src = null) => {
+    const lamp = { x, y, z, pk, get power() { return POWER[pk]; }, kind, on: true, k: 1, hl: 0, light: null, mat: src?.mat || null, paper: src?.paper || null, group: src?.group || null };
     if (real) {
       lamp.light = new THREE.PointLight(0xffa860, 0, 15, 1.8);
       lamp.light.position.set(x, y, z);
@@ -19,12 +26,11 @@ export function createLights(scene, lanterns, hangingLamps) {
     }
     lamps.push(lamp);
   };
-  const POWER = { stone: 5.5, andon: 4.0, ashimoto: 1.5 };
-  lanterns.forEach((l) => add(l.x, l.y, l.z, POWER[l.kind], true, l.kind, l));
+  lanterns.forEach((l) => add(l.x, l.y, l.z, l.kind, true, l.kind, l));
   // 簷廊：窗內透出的光，合併成兩盞較亮的光（不是可熄的燈具）
-  add(-7.4, 2.0, 9.9, 9, true, 'engawa');
-  add(-0.6, 2.0, 9.9, 9, true, 'engawa');
-  hangingLamps.forEach((h) => add(h.x, h.y, h.z, 2.0, false, h.kind, h));
+  add(-7.4, 2.0, 9.9, 'engawa', true, 'engawa');
+  add(-0.6, 2.0, 9.9, 'engawa', true, 'engawa');
+  hangingLamps.forEach((h) => add(h.x, h.y, h.z, 'hanging', false, h.kind, h));
 
   let level = 0;
   function sync() {
@@ -32,8 +38,8 @@ export function createLights(scene, lanterns, hangingLamps) {
       const v = level * lamp.k;
       if (lamp.light) lamp.light.intensity = lamp.power * v;
       // 白天紙面留一點底亮（像透著天光）；夜裡熄掉的燈要全暗
-      if (lamp.mat) lamp.mat.emissiveIntensity = 0.12 * (1 - level * (1 - lamp.k)) + v * 1.9 + lamp.hl * (0.3 + 0.6 * v);
-      if (i < LAMP_N) G.lampPos.value[i].set(lamp.x, lamp.y, lamp.z, lamp.power * v * 0.11);
+      if (lamp.mat) lamp.mat.emissiveIntensity = 0.12 * (1 - level * (1 - lamp.k)) + v * GLOW.paper + lamp.hl * (0.3 + 0.6 * v);
+      if (i < LAMP_N) G.lampPos.value[i].set(lamp.x, lamp.y, lamp.z, lamp.power * v * GLOW.tint);
     });
   }
   sync();

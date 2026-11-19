@@ -758,20 +758,24 @@ export function createTrees(scene, world, slopeSpots = []) {
   const forestCore = coreMesh(core, coreMat);
   forestCore.castShadow = true;
   const forestLeaves = forestCards.build(foliageMaterial(atlas));
-  group.add(woodMesh(FW, bark), forestCore, forestLeaves);
+  const forestWood = woodMesh(FW, bark);
+  group.add(forestWood, forestCore, forestLeaves);
+  const slope = []; // 崖下與坡上的樹（開發者面板的顯示開關用）
 
   if (slopeSpots.length) {
     const slopeLeaves = slopeCards.build(foliageMaterial(atlas), false, true);
     slopeLeaves.receiveShadow = false;
     const slopeWood = woodMesh(SW, bark);
     slopeWood.castShadow = false;
-    group.add(slopeWood, coreMesh(sc, coreMat), slopeLeaves);
+    slope.push(slopeWood, coreMesh(sc, coreMat), slopeLeaves);
+    group.add(...slope);
   }
 
   const fallen = fallenLeaves(scene, world, maples, leafMap, rand);
 
   return {
     group, mapleLeaves, forestLeaves, fallen, leafMap, gradColor,
+    forest: [forestWood, forestCore, forestLeaves], slope,
     maples: maples.map((t) => ({ center: t.C, radius: t.R, hue: t.hue })),
     // 4C「搖落紅葉」用：pos 是注視點，uShake 加大時這一枝會劇烈晃動
     low: { mesh: lowLeaves, pos: lowPos, uShake: lowFol.uShake, hue: maples[3].hue },

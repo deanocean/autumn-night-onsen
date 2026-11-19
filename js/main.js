@@ -61,7 +61,7 @@ const { world, lamps } = buildWorld(scene);
 const props = createProps(world);
 const trees = createTrees(scene, world, [...slopeTreeSpots(), ...ridgeTreeSpots()]);
 const water = createWater(scene);
-createSteam(scene);
+const steam = createSteam(scene);
 const sky = createSky(scene, renderer);
 const vista = createVista(scene, { sun, hemi });
 const lights = createLights(scene, props.lanterns, lamps);
@@ -110,16 +110,34 @@ timeBtn.addEventListener('click', () => { toggleTime(); timeBtn.blur(); });
 soundBtn.addEventListener('click', () => { toggleSound(); soundBtn.blur(); });
 helpBtn.addEventListener('click', () => { interact.key('KeyH'); helpBtn.blur(); });
 
+// 開發者面板（` 鍵）：第一次打開時才載入 dev.js；開著的時候不鎖定滑鼠（可按住拖曳轉視角）
+let dev = null, devLoading = false;
+const devOpen = () => !!dev && dev.open;
+async function toggleDev() {
+  if (devLoading) return;
+  if (!dev) {
+    devLoading = true;
+    try {
+      const { createDev } = await import('./dev.js');
+      dev = createDev({ renderer, scene, camera, sun, hemi, dayNight, lights, sky, vista, trees, water, steam, views, player, audio });
+    } catch (e) { console.error(e); } finally { devLoading = false; }
+  } else dev.toggle();
+  if (devOpen()) { if (document.pointerLockElement) document.exitPointerLock(); resume.hidden = true; }
+  else { player.lock(); canvas.focus(); }
+}
+
 canvas.tabIndex = 0;
 canvas.addEventListener('click', () => {
-  if (player.enabled && document.pointerLockElement !== canvas) player.lock();
+  if (player.enabled && !devOpen() && document.pointerLockElement !== canvas) player.lock();
 });
 document.addEventListener('pointerlockchange', () => {
-  resume.hidden = !player.enabled || document.pointerLockElement === canvas;
+  resume.hidden = !player.enabled || devOpen() || document.pointerLockElement === canvas;
 });
 
 addEventListener('keydown', (e) => {
   if (!player.enabled || e.repeat) return;
+  if (e.target.closest && e.target.closest('.dev-panel')) return; // 在面板裡打字
+  if (e.code === 'Backquote') { toggleDev(); return; }
   if (e.code === 'KeyT') toggleTime();
   // 觀景點：V 下一個；觀景中按移動鍵回到原位，其他的鍵（除了 T、N、H）先不理
   if (e.code === 'KeyV' && !guides.top && !interact.mode && !player.anchor) views.next();
@@ -173,12 +191,13 @@ function frame() {
   vista.update(dt);
   audio.update(dt, interact.mode === 'soak' || interact.mode === 'tsubo');
   guides.update(player, camera);
+  if (dev) dev.update();
   renderer.render(scene, guides.top ? guides.topCam : camera);
   requestAnimationFrame(frame);
 }
 
 // 供自動檢查使用
-window.__onsen = { player, views, scene, camera, renderer, G, dayNight, guides, lights, sky, vista, trees, props, water, interact, audio, ready: false };
+window.__onsen = { toggleDev, get dev() { return dev; }, player, views, scene, camera, renderer, G, dayNight, guides, lights, sky, vista, trees, props, water, interact, audio, ready: false };
 
 startBtn.disabled = true;
 startBtn.textContent = '準備中…';

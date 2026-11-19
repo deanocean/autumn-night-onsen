@@ -44,11 +44,14 @@ export function wood(color, grain = 0, plank = 0, weather = 0.45, plankY = false
 }
 const CEDAR = 0x7a5740, CEDAR_DARK = 0x5c4433, HINOKI = 0xb08a5c, BOARD = 0x8a6646;
 const DECK_WOOD = 0x6f5d4c; // 望景台：日曬雨淋後褪成灰褐的木板
-const SHOJI_NIGHT = 0.95;    // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
-const SHOJI_ALBEDO = 0.2;    // 夜晚窗紙反光的比例（1 = 和白天一樣白）
 const SHU = 0xb5351f;        // 二樓高欄的朱紅
-const UPPER_GLOW = 0.7;      // 二樓與望樓的窗夜晚相對於下層的亮度（太亮會被色調映射洗成白色，暖色出不來）
-const EAVE_LAMP = 0.6;       // 二樓簷下那排小提燈的亮度（相對於燈籠的和紙）
+// 窗紙與提燈的夜晚亮度（每畫一次都會讀，開發者面板可即時調）
+export const LOOK = {
+  SHOJI_NIGHT: 0.95,  // 夜晚窗紙透光的亮度（相對於燈籠的和紙）
+  SHOJI_ALBEDO: 0.2,  // 夜晚窗紙反光的比例（1 = 和白天一樣白）
+  UPPER_GLOW: 0.7,    // 二樓與望樓的窗夜晚相對於下層的亮度（太亮會被色調映射洗成白色，暖色出不來）
+  EAVE_LAMP: 0.6,     // 二樓簷下那排小提燈的亮度（相對於燈籠的和紙）
+};
 
 function mesh(g, geo, m, x, y, z, shadow = true) {
   const o = new THREE.Mesh(geo, m);
@@ -439,7 +442,7 @@ export function buildWorld(scene) {
   const ST = shojiTextures(fbm, rng);
   // 夜間發光強度由 daynight.js 驅動 M.paper；窗紙用 getter 直接跟著它（不必改 daynight.js）
   // G.house 降到 0（場內的燈全熄）時，窗內也只剩一點餘光
-  const shojiMat = (emap, gain = 1, glow = 0xffc27a) => {
+  const shojiMat = (emap, gainKey = null, glow = 0xffc27a) => {
     const m = new THREE.MeshStandardMaterial({ color: 0xf3e3c2, map: ST.plain, emissive: glow, emissiveMap: emap, emissiveIntensity: M.paper.emissiveIntensity, roughness: 1 });
     const col = m.color.clone();
     Object.defineProperty(m, 'emissiveIntensity', {
@@ -448,8 +451,9 @@ export function buildWorld(scene) {
       // three 每畫一次都會讀這個值，順便在這裡更新顏色。
       get: () => {
         const p = M.paper.emissiveIntensity, n = G.night.value, h = G.house.value;
-        m.color.copy(col).multiplyScalar(1 - (1 - SHOJI_ALBEDO) * n);
-        return p * (1 - (1 - SHOJI_NIGHT) * n) * h * (1 + (gain - 1) * n) + Math.min(p, 0.12) * (1 - 0.75 * n) * (1 - h);
+        m.color.copy(col).multiplyScalar(1 - (1 - LOOK.SHOJI_ALBEDO) * n);
+        const gain = gainKey ? LOOK[gainKey] : 1;
+        return p * (1 - (1 - LOOK.SHOJI_NIGHT) * n) * h * (1 + (gain - 1) * n) + Math.min(p, 0.12) * (1 - 0.75 * n) * (1 - h);
       },
       set() {}, configurable: true,
     });
@@ -458,7 +462,7 @@ export function buildWorld(scene) {
   const SHOJI = shojiMat(ST.plain);
   const SHOJI_LOWER = { 1: shojiMat(ST.panels[0]), 2: shojiMat(ST.panels[1]), 5: shojiMat(ST.panels[2]), 6: shojiMat(ST.panels[3]) };
   const SHOJI_ROUND = shojiMat(ST.round);
-  const SHOJI_UP = shojiMat(ST.plain, UPPER_GLOW, 0xff8c34); // 二樓與望樓：比下層更暖的琥珀色，遠看是一整排燈火
+  const SHOJI_UP = shojiMat(ST.plain, 'UPPER_GLOW', 0xff8c34); // 二樓與望樓：比下層更暖的琥珀色，遠看是一整排燈火
   const world = new THREE.Group();
   scene.add(world);
   const rand = rng(20261110);
@@ -639,7 +643,7 @@ export function buildWorld(scene) {
     {
       const lm = new THREE.MeshStandardMaterial({ color: 0xf1d2a8, emissive: 0xff8a36, roughness: 1 });
       Object.defineProperty(lm, 'emissiveIntensity', {
-        get: () => 0.1 + (M.paper.emissiveIntensity - 0.12) * EAVE_LAMP * (0.04 + 0.96 * G.house.value),
+        get: () => 0.1 + (M.paper.emissiveIntensity - 0.12) * LOOK.EAVE_LAMP * (0.04 + 0.96 * G.house.value),
         set() {}, configurable: true,
       });
       const lz = railZ + 0.02, ly = 4.93, top = eaveY + (lz - (zc - half)) * PITCH - 0.2;

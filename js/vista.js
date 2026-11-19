@@ -357,7 +357,7 @@ const RIDGE_STEP = 7.5;
 // aFx：亮度、相位、是否在海面拉出倒影、種類（0 常亮、1 航空障礙燈慢閃、2 燈塔的閃光、3 聚落上空的光暈）
 const lightVert = /* glsl */ `
 attribute vec3 aCol; attribute vec4 aFx;
-uniform float uLit, uPx, uTime;
+uniform float uLit, uPx, uTime, uGain;
 varying vec3 vC; varying float vA; varying float vK;
 void main(){
   vec4 mv = viewMatrix * vec4(position, 1.0);
@@ -376,6 +376,7 @@ void main(){
   gl_PointSize = uPx * (2.6 + 3.6 * aFx.x) * clamp(1500.0 / d, 0.66, 2.0);
   // 種類 3：聚落上空的光暈（aFx.x 是半徑，公尺），不閃
   if (aFx.w > 2.5) { vA = uLit * 0.036 * exp(-d / 16000.0) * smoothstep(900.0, 2600.0, d); gl_PointSize = uPx * clamp(aFx.x * 640.0 / d, 6.0, 200.0); }
+  vA *= uGain; // 整體亮度（開發者面板用，預設 1）
 }`;
 const lightFrag = /* glsl */ `
 varying vec3 vC; varying float vA; varying float vK;
@@ -391,7 +392,7 @@ void main(){
 // 海面上的倒影：燈對海面的鏡像點，沿視線落在海面上的位置，拉成一條上下抖動的光條
 const streakVert = /* glsl */ `
 attribute vec3 aCol; attribute vec4 aFx;
-uniform float uLit, uPx, uTime;
+uniform float uLit, uPx, uTime, uGain;
 varying vec3 vC; varying float vA; varying float vSize; varying float vPh;
 void main(){
   vec3 m = vec3(position.x, 2.0 * ${SEA.toFixed(1)} - position.y, position.z);
@@ -402,7 +403,7 @@ void main(){
   vec4 mv = viewMatrix * vec4(w, 1.0);
   float d = -mv.z;
   float tw = aFx.w > 1.5 && aFx.w < 2.5 ? 0.12 + 2.2 * pow(max(sin(uTime * 0.9 + aFx.y * 6.283), 0.0), 24.0) : 1.0;
-  vA = aFx.z * aFx.x * uLit * tw * exp(-d / 14000.0);
+  vA = aFx.z * aFx.x * uLit * tw * exp(-d / 14000.0) * uGain;
   vC = aCol; vPh = aFx.y;
   gl_Position = projectionMatrix * mv;
   // 深度往前挪 4%：幾公里外的深度精度只有十公尺上下，貼著海面的點會被海面自己吃掉
@@ -852,7 +853,7 @@ export function createVista(scene, { sun, hemi }) {
   const houses = new THREE.Mesh(hgeo, new THREE.ShaderMaterial({ vertexShader: houseVert, fragmentShader: houseFrag, uniforms, fog: false }));
   houses.frustumCulled = false;
   scene.add(houses);
-  const lu = { uLit: uniforms.uLit, uTime: G.uTime, uPx: { value: Math.min(devicePixelRatio, 2) } };
+  const lu = { uLit: uniforms.uLit, uTime: G.uTime, uPx: { value: Math.min(devicePixelRatio, 2) }, uGain: { value: 1 } }; // uGain：夜景燈火與倒影的整體亮度
   const add = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false };
   const lightPts = new THREE.Points(lgeo, new THREE.ShaderMaterial({ uniforms: lu, vertexShader: lightVert, fragmentShader: lightFrag, ...add }));
   const streaks = new THREE.Points(lgeo, new THREE.ShaderMaterial({ uniforms: lu, vertexShader: streakVert, fragmentShader: streakFrag, ...add }));
@@ -860,7 +861,7 @@ export function createVista(scene, { sun, hemi }) {
   scene.add(lightPts, streaks);
 
   return {
-    terrain, uniforms, houses, houseCount: hgeo.instanceCount, lights: lightPts, streaks, lightCount: lgeo.attributes.position.count,
+    terrain, uniforms, lightUniforms: lu, houses, houseCount: hgeo.instanceCount, lights: lightPts, streaks, lightCount: lgeo.attributes.position.count,
     heightAt,
     update() {
       uniforms.uSunCol.value.copy(sun.color);

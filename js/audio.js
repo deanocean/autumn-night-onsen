@@ -12,7 +12,7 @@ const LOOPS = { stream: 45, birds: 52, crickets: 45, wind: 46 };
 const SLOTS = { step_wood: [0.4, 6], step_wade: [0.7, 12] };
 const SHOTS = ['pour', 'splash', 'gulp'];
 // 各層的音量，要調整體平衡改這裡
-const MIX = {
+export const MIX = {
   master: 0.9,
   stream: 1.5,     // 湯口（有方位，越近越大聲）
   soak: 0.42,      // 泡湯時貼在耳邊的水聲
@@ -84,12 +84,14 @@ export function createAudio({ camera, player }) {
       // 足湯的注水：同一份水聲調高、調小，定位在竹筒口，走近才聽得到
       const fg = ctx.createGain();
       fg.gain.value = MIX.foot;
+      amb.foot = fg;
       const hp = ctx.createBiquadFilter();
       hp.type = 'highpass'; hp.frequency.value = 900;
       loopSource(name, 1.35, 31).connect(hp).connect(fg).connect(panner({ x: L.ASHIYU.spout.x, y: L.DECK.y + L.ASHIYU.waterY, z: L.ASHIYU.spout.z }, 1.0, 1.6));
       // 壺湯的湯口：比足湯粗一點的水柱落進壺裡
       const tg = ctx.createGain();
       tg.gain.value = MIX.tsubo;
+      amb.tsubo = tg;
       const thp = ctx.createBiquadFilter();
       thp.type = 'highpass'; thp.frequency.value = 500;
       loopSource(name, 1.15, 8).connect(thp).connect(tg).connect(panner({ x: L.TSUBO.spout.tip.x, y: L.TSUBO.pot.waterY, z: L.TSUBO.z }, 1.2, 1.5));
@@ -221,6 +223,13 @@ export function createAudio({ camera, player }) {
       try { localStorage.setItem('onsen-muted', muted ? '1' : '0'); } catch (_) { /* 不記也無妨 */ }
       if (ctx) master.gain.setTargetAtTime(muted ? 0 : MIX.master, ctx.currentTime, 0.08);
       return muted;
+    },
+
+    // 改了 MIX 之後套用到「建立時才設定一次」的那幾層（其他層每格都會讀 MIX）
+    applyMix() {
+      if (!ctx) return;
+      if (!muted) master.gain.setTargetAtTime(MIX.master, ctx.currentTime, 0.05);
+      for (const k of ['stream', 'foot', 'tsubo']) if (amb[k]) amb[k].gain.setTargetAtTime(MIX[k], ctx.currentTime, 0.05);
     },
 
     // soaking：是否正在泡湯

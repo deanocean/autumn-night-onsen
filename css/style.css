@@ -275,3 +275,18 @@ body.quiet #time, body.quiet #sound, body.quiet #helpbtn { opacity: 0; pointer-e
   z-index: 4;
 }
 #fade.on { opacity: 1; }
+
+/* 開發者面板（` 鍵，js/dev.js；lil-gui） */
+.dev-panel.lil-gui.root {
+  position: fixed;
+  top: 4.2rem;
+  right: 1.25rem;
+  z-index: 7;
+  max-height: calc(100vh - 5.5rem);
+  overflow-y: auto;
+  --font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif;
+  --font-size: 12px;
+  --name-width: 52%;
+  --background-color: rgba(18, 18, 22, 0.88);
+}
+.dev-panel .controller.disabled.dev-stat { opacity: 1; }
