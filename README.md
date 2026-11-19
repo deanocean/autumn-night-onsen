@@ -6,7 +6,7 @@ An immersive 3D hot-spring scene you can walk around in. A rock-lined open-air b
 
 Plain HTML, CSS and JavaScript with [Three.js](https://threejs.org/). There is no build step.
 
-**▶ Live demo:** https://YOUR-USERNAME.github.io/YOUR-REPO/ *(desktop browser recommended)*
+**▶ Live demo:** https://deanocean.github.io/autumn-night-onsen/ *(desktop browser recommended)*
 
 ## Screenshots
 
