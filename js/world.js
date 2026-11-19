@@ -139,7 +139,7 @@ function rock(g, rand, x, z, r, h, baseY, detail) {
   return o;
 }
 
-// 鳥瞰時要隱藏的東西（東屋與簷廊下屋的屋頂、樹冠、野点傘；湯屋大屋頂不藏）
+// 鳥瞰時要隱藏的東西（簷廊的下屋、樹冠、野点傘；湯屋大屋頂與東屋不藏）
 export const OVERHEAD = [];
 
 // 一片屋面：杮葺、底下的野地板與一根根垂木。side 表示簷口在本地座標的哪一端
@@ -148,7 +148,6 @@ function roofSlope(g, cx, y, z, len, sl, side, ang, color) {
   s.position.set(cx, y, z);
   s.rotation.x = side * ang;
   g.add(s);
-  OVERHEAD.push(s);
   box(tmp, len, 0.09, sl + 0.12, 0, 0.02, 0, M.roof);
   wbox(tmp, len - 0.04, 0.025, sl, 0, -0.04, 0, BOARD, { grain: 0, plank: 0.16, weather: 0.25 });
   for (let x = -len / 2 + 0.2; x <= len / 2 - 0.15; x += 0.46) wbox(tmp, 0.055, 0.085, sl + 0.06, x, -0.095, 0, color, { grain: 2 });
@@ -162,13 +161,13 @@ function gable(g, { x0, x1, zc, half, eaveY, ridgeY, over = 0.5, color = CEDAR }
   const len = x1 - x0 + over * 2, cx = (x0 + x1) / 2;
   const rise = ridgeY - eaveY, sl = Math.hypot(half, rise), ang = Math.atan2(rise, half);
   for (const side of [-1, 1]) roofSlope(g, cx, (eaveY + ridgeY) / 2, zc + (side * half) / 2, len, sl, side, ang, color);
-  OVERHEAD.push(wbox(g, len + 0.1, 0.11, 0.34, cx, ridgeY + 0.07, zc, CEDAR_DARK)); // 棟木
+  wbox(g, len + 0.1, 0.11, 0.34, cx, ridgeY + 0.07, zc, CEDAR_DARK); // 棟木
 }
 
 // 單斜的下屋（庇）：高的一端靠牆（zTop），簷口朝 -z
 function pent(g, { x0, x1, zTop, yTop, zEave, yEave, over = 0.4, color = CEDAR }) {
   const run = zTop - zEave, rise = yTop - yEave;
-  roofSlope(g, (x0 + x1) / 2, (yTop + yEave) / 2, (zTop + zEave) / 2, x1 - x0 + over * 2, Math.hypot(run, rise), -1, Math.atan2(rise, run), color);
+  OVERHEAD.push(roofSlope(g, (x0 + x1) / 2, (yTop + yEave) / 2, (zTop + zEave) / 2, x1 - x0 + over * 2, Math.hypot(run, rise), -1, Math.atan2(rise, run), color)); // 鳥瞰時藏起來，才看得到簷廊
 }
 
 // ---------- 湯屋（道後溫泉本館風格）用的幾何工具 ----------
