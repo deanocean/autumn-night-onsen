@@ -2,11 +2,18 @@
 import * as THREE from 'three';
 import { LABELS } from './layout.js';
 import { OVERHEAD } from './world.js';
+import { t, lang, onLang } from './i18n.js';
 
-function label(text) {
+// 標籤文字畫在 canvas 上。切換語言時換一張新貼圖（同一個材質，不會多編 shader）
+const FONT = {
+  zh: '500 44px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif TC", serif',
+  ja: '500 44px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", serif',
+  en: '500 44px "Iowan Old Style", "Palatino", Georgia, serif',
+};
+function paint(s, text) {
   const c = document.createElement('canvas');
   const ctx = c.getContext('2d');
-  const font = '500 44px "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif TC", serif';
+  const font = FONT[lang];
   ctx.font = font;
   const w = Math.ceil(ctx.measureText(text).width) + 48;
   c.width = w; c.height = 76;
@@ -18,21 +25,29 @@ function label(text) {
   ctx.fillText(text, 24, 40);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, fog: false, toneMapped: false }));
+  if (s.material.map) s.material.map.dispose();
+  s.material.map = tex;
   s.scale.set((w / 76) * 0.55, 0.55, 1);
+}
+
+function label(key) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ depthTest: false, transparent: true, fog: false, toneMapped: false }));
+  s.userData.key = key;
   s.renderOrder = 30;
+  paint(s, t(key));
   return s;
 }
 
 export function createGuides(scene) {
   const labels = new THREE.Group();
-  LABELS.forEach(([text, x, y, z]) => {
-    const s = label(text);
+  LABELS.forEach(([key, x, y, z]) => {
+    const s = label(key);
     s.position.set(x, y, z);
     labels.add(s);
   });
   labels.visible = false;
   scene.add(labels);
+  onLang(() => labels.children.forEach((s) => paint(s, t(s.userData.key))));
 
   const topCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 200);
   topCam.up.set(0, 0, -1); // 畫面上方為北

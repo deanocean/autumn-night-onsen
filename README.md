@@ -48,6 +48,7 @@ Plain HTML, CSS and JavaScript with [Three.js](https://threejs.org/). There is n
 - **Interactions** (look at an object and press **E**): soak in the bath, splash water with a wooden bucket, light or put out each lantern (turn them all off and the stars get brighter), sit at the foot bath, soak in the pot bath, lie back on the lounge chair to watch the sky, shake leaves off a low maple branch, and drink bottled milk. The *shishi-odoshi* (bamboo water clacker) cycles on its own.
 - **Ambient sound:** running water, birdsong by day and crickets at night, plus footsteps that change with the surface underfoot.
 - **Camera views:** fixed viewpoints (**V**) for high angles and telephoto shots, a bird's-eye map (**M**) and area labels (**L**).
+- **Languages:** the interface is in English, Japanese and Traditional Chinese. It follows your browser language on the first visit, and you can switch on the start screen.
 
 The in-scene text (hints, help panel, labels) is in Traditional Chinese.
 
@@ -112,6 +113,7 @@ js/interact.js      Gaze detection, hints, interaction animations
 js/player.js        First-person movement and collision
 js/views.js         Fixed viewpoints (V)
 js/labels.js        Area labels (L) and bird's-eye view (M)
+js/i18n.js          Interface text in English, Japanese and Chinese
 js/audio.js         Ambient mix, footsteps, interaction sounds
 js/dev.js           Developer panel (lil-gui, loaded on first use)
 textures/           PBR textures (CC0)

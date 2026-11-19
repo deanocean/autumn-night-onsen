@@ -2,14 +2,15 @@
 // V 依序切到下一個，最後一個之後回到原位；按移動鍵也會直接回到原位。
 // 只接管相機，不動玩家：player.update() 之後由 update() 蓋掉相機的位置、方向與視角。
 import * as THREE from 'three';
+import { t as tr } from './i18n.js'; // 這裡的 t 是運鏡的時間
 
-// a → b：鏡頭在兩點之間來回慢慢移動（一趟 SWEEP 秒）；look：注視的點；fov：垂直視角（預設 68，越小越長焦）
+// name：i18n.js 的 key。a → b：鏡頭在兩點之間來回慢慢移動（一趟 SWEEP 秒）；look：注視的點；fov：垂直視角（預設 68，越小越長焦）
 const VIEWS = [
-  { name: '湯屋全景', a: [7, 6.5, -6], b: [3.5, 7.5, -8.5], look: [-4.5, 4.6, 12], fov: 50 },
-  { name: '屋頂與海灣', a: [-13, 11.5, 21], b: [-9, 12.5, 22], look: [0, 2, -12], fov: 55 },
-  { name: '望樓', a: [-0.5, 4, -2], b: [-3, 4.5, -2], look: [-4.5, 8.3, 13.5], fov: 20 },
-  { name: '崖外回望', a: [9, 8.5, -17], b: [3, 9.5, -18], look: [-2.5, 1.5, 4], fov: 52 },
-  { name: '唐破風', a: [-9, 3.2, 4.6], b: [-7.2, 3.4, 5.4], look: [-4.6, 3.9, 8.6], fov: 30 },
+  { name: 'view.bathhouse', a: [7, 6.5, -6], b: [3.5, 7.5, -8.5], look: [-4.5, 4.6, 12], fov: 50 },
+  { name: 'view.roofs', a: [-13, 11.5, 21], b: [-9, 12.5, 22], look: [0, 2, -12], fov: 55 },
+  { name: 'view.tower', a: [-0.5, 4, -2], b: [-3, 4.5, -2], look: [-4.5, 8.3, 13.5], fov: 20 },
+  { name: 'view.cliff', a: [9, 8.5, -17], b: [3, 9.5, -18], look: [-2.5, 1.5, 4], fov: 52 },
+  { name: 'view.karahafu', a: [-9, 3.2, 4.6], b: [-7.2, 3.4, 5.4], look: [-4.6, 3.9, 8.6], fov: 30 },
 ];
 const SWEEP = 26, FADE = 0.35, FOV = 68;
 
@@ -32,7 +33,7 @@ export function createViews({ camera, player, guides }) {
     } else {
       player.frozen = true;
       camera.fov = VIEWS[i].fov;
-      cap.innerHTML = `<span>觀景點 ${i + 1}／${VIEWS.length}</span>${VIEWS[i].name}<span><kbd>V</kbd>下一個　<kbd>W A S D</kbd>回到原位</span>`;
+      cap.innerHTML = `<span>${tr('view.n')} ${i + 1}${tr('view.of')}${VIEWS.length}</span>${tr(VIEWS[i].name)}<span><kbd>V</kbd>${tr('view.next')}　<kbd>W A S D</kbd>${tr('view.back')}</span>`;
       cap.classList.add('show');
     }
     camera.updateProjectionMatrix();

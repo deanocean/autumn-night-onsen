@@ -15,6 +15,7 @@ import { createInteract } from './interact.js';
 import { createAudio } from './audio.js';
 import { G } from './env.js';
 import { texturesReady } from './shaders.js';
+import { t, onLang } from './i18n.js';
 
 const canvas = document.getElementById('scene');
 const intro = document.getElementById('intro');
@@ -34,7 +35,7 @@ let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 } catch (e) {
-  fail('這個瀏覽器無法啟動 WebGL，請改用桌機版 Chrome、Edge 或 Safari。');
+  fail(t('ui.webgl'));
   throw e;
 }
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -84,10 +85,14 @@ addEventListener('resize', resize);
 resize();
 
 // 白天 → 黃昏 → 夜晚 → 白天；按鈕上寫的是下一個時段
-const NEXT_LABEL = { day: '切換到黃昏', dusk: '切換到夜晚', night: '切換到白天' };
+const NEXT_LABEL = { day: 'ui.to.dusk', dusk: 'ui.to.night', night: 'ui.to.day' };
+let timePhase = 'day';
+const showTime = () => { timeBtn.textContent = t(NEXT_LABEL[timePhase]); };
 function toggleTime() {
-  timeBtn.textContent = NEXT_LABEL[dayNight.next()];
+  timePhase = dayNight.next();
+  showTime();
 }
+showTime();
 
 startBtn.addEventListener('click', () => {
   intro.classList.add('hide');
@@ -100,7 +105,7 @@ startBtn.addEventListener('click', () => {
   canvas.focus();
 });
 function showSound() {
-  soundBtn.textContent = audio.muted ? '聲音：關' : '聲音：開';
+  soundBtn.textContent = t(audio.muted ? 'ui.sound.off' : 'ui.sound.on');
   soundBtn.setAttribute('aria-pressed', audio.muted ? 'false' : 'true');
 }
 showSound();
@@ -200,13 +205,17 @@ function frame() {
 // 供自動檢查使用
 window.__onsen = { toggleDev, get dev() { return dev; }, player, views, scene, camera, renderer, G, dayNight, guides, lights, sky, vista, trees, props, water, interact, audio, ready: false };
 
+const showStart = () => { startBtn.textContent = t(startBtn.disabled ? 'preparing' : 'start'); };
+// 語言只在開始畫面切換：重寫按鈕上的字（區域標籤由 labels.js 自己重畫）
+onLang(() => { showStart(); showTime(); showSound(); });
+
 startBtn.disabled = true;
-startBtn.textContent = '準備中…';
+showStart();
 warmUp().catch((e) => console.error(e)).then(() => {
   clock.getDelta();
   frame();
   canvas.classList.add('ready');
   startBtn.disabled = false;
-  startBtn.textContent = '進入場景';
+  showStart();
   window.__onsen.ready = true;
 });

@@ -6,6 +6,7 @@ import * as L from './layout.js';
 import { G } from './env.js';
 import { GLSL_NOISE } from './shaders.js';
 import { MATERIALS } from './world.js';
+import { t as tr } from './i18n.js'; // interact.js 裡很多 t 是時間變數
 
 const REACH = 2.5;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -111,7 +112,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       id: 'lamp' + i, type: 'lamp',
       pos: lamp.paper.getWorldPosition(V()),
       r: lamp.kind === 'stone' ? 0.36 : lamp.kind === 'ashimoto' ? 0.22 : 0.28, reach: high ? 3.2 : REACH,
-      label: () => (lamp.on ? '熄燈' : '點燈'),
+      label: () => tr(lamp.on ? 'hint.unlight' : 'hint.light'),
       act() { lamp.on = !lamp.on; audio.lamp(this.pos, lamp.on); },
       glow(v) { lamp.hl = v; },
     });
@@ -131,7 +132,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     let running = false;
     targets.push({
       id: 'oke', type: 'oke', pos: home.clone().setY(home.y + 0.08), r: 0.3,
-      label: () => '舀水',
+      label: () => tr('hint.oke'),
       enabled: () => !running,
       glow,
       // かけ湯：伸到池邊舀一桶，提到自己肩頭往身上淋，再放回原位
@@ -220,7 +221,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     sky.meteor.rate = 3;
     sky.meteor.wait = Math.min(sky.meteor.wait, 2.5);
     document.body.classList.add('quiet');
-    flash('<kbd>E</kbd>起身', 3.5);
+    flash(`<kbd>E</kbd>${tr('hint.up')}`, 3.5);
     seatLeave = () => {
       player.anchor = back;
       sky.meteor.rate = 1;
@@ -249,7 +250,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       id: 'ashiyu', type: 'ashiyu',
       pos: (cam) => V(clampX(cam.x), seatY, zc),
       r: 0.5,
-      label: () => '坐下泡腳',
+      label: () => tr('hint.ashiyu'),
       glow,
       act() {
         // 泡腳賞景：視線平平地望向海灣（夜裡略為抬高，看得到星空與對岸的燈火）
@@ -267,7 +268,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     targets.push({
       id: 'chair', type: 'chair',
       pos: V(c.x, L.LOUNGE.y + 0.5, c.z), r: 0.6, reach: 2.8,
-      label: () => (G.night.value > 0.75 ? '躺下看星星' : '躺下'),
+      label: () => tr(G.night.value > 0.75 ? 'hint.stars' : 'hint.lie'),
       glow,
       act() {
         // 頭的位置：靠背上段（局部 z = 0.66）
@@ -285,7 +286,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     targets.push({
       id: 'tsubo', type: 'tsubo',
       pos: V(T.x, P.waterY, T.z), r: 0.8, reach: 3.0,
-      label: () => '入壺湯',
+      label: () => tr('hint.tsubo'),
       glow,
       act() {
         sit('tsubo', {
@@ -423,7 +424,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     const mat = trees.low.mesh.material;
     targets.push({
       id: 'leaf', type: 'leaf', pos: trees.low.pos.clone(), r: 0.6, reach: 2.8,
-      label: () => '搖一搖楓枝',
+      label: () => tr('hint.maple'),
       enabled: () => !leaves.shaking,
       glow(v) { mat.emissive.setRGB(0.16 * v, 0.085 * v, 0.04 * v); },
       act() { leaves.shake(); audio.leaf(trees.low.pos); },
@@ -439,7 +440,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     targets.push({
       id: 'milk' + i, type: 'milk',
       pos: g.getWorldPosition(V()).add(V(0, 0.09, 0)), r: 0.085,
-      label: () => '喝一瓶',
+      label: () => tr('hint.milk'),
       enabled: () => !b.empty,
       glow,
       act() {
@@ -549,7 +550,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
     player.eyeTarget = L.POOL.waterY + 0.34 - L.groundY(player.pos.x, player.pos.z);
     water.addRipple(player.pos.x, player.pos.z, 1.6);
     audio.soak(true);
-    flash('<kbd>E</kbd>起身', 3.5);
+    flash(`<kbd>E</kbd>${tr('hint.up')}`, 3.5);
   }
   function stand() {
     if (seatLeave) { seatLeave(); seatLeave = null; }
@@ -665,7 +666,7 @@ export function createInteract({ scene, world, camera, player, props, lights, tr
       let hint = '';
       if (flashT > 0) hint = flashText;
       else if (gaze) hint = `<kbd>E</kbd>${gaze.label()}`;
-      else if (!gaze && !mode && !busy && canSoak() && !guides.away) hint = '<kbd>E</kbd>泡湯';
+      else if (!gaze && !mode && !busy && canSoak() && !guides.away) hint = `<kbd>E</kbd>${tr('hint.soak')}`;
       setHint(hint);
     },
   };

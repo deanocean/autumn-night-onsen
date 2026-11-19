@@ -16,25 +16,30 @@
 <canvas id="scene"></canvas>
 
 <div id="intro" class="panel">
+  <div id="lang" role="group" aria-label="Language">
+    <button type="button" data-lang="zh" lang="zh-Hant">中文</button>
+    <button type="button" data-lang="en" lang="en">English</button>
+    <button type="button" data-lang="ja" lang="ja">日本語</button>
+  </div>
   <div class="panel-inner">
-    <p class="eyebrow">貸切 · 眺望の湯 · 十一月</p>
-    <h1>秋夜露天風呂</h1>
-    <p class="lead">四處走走、與環境互動，沈浸在自然中。<br>泡進湯裡，好好放鬆，把時間交給海灣與天色。<br>建議戴上耳機。</p>
+    <p class="eyebrow" lang="ja">貸切 · 眺望の湯 · 十一月</p>
+    <h1 data-i18n="title">秋夜露天風呂</h1>
+    <p class="lead" data-i18n-html="lead">四處走走、與環境互動，沈浸在自然中。<br>泡進湯裡，好好放鬆，把時間交給海灣與天色。<br>建議戴上耳機。</p>
     <dl class="keys">
-      <div><dt>W A S D</dt><dd>移動</dd></div>
-      <div><dt>滑鼠</dt><dd>轉動視角</dd></div>
-      <div><dt>Shift</dt><dd>快走</dd></div>
-      <div><dt>E</dt><dd>與注視的東西互動</dd></div>
-      <div><dt>H</dt><dd>操作說明</dd></div>
-      <div><dt>T</dt><dd>切換白天／黃昏／夜晚</dd></div>
-      <div><dt>V</dt><dd>觀景點（高處與長焦的鏡頭）</dd></div>
-      <div><dt>M</dt><dd>鳥瞰全區</dd></div>
-      <div><dt>L</dt><dd>區域標籤</dd></div>
-      <div><dt>N</dt><dd>聲音開／關</dd></div>
-      <div><dt>Esc</dt><dd>釋放滑鼠</dd></div>
-      <div><dt>`</dt><dd>開發者面板（日文鍵盤：Shift + @）</dd></div>
+      <div><dt>W A S D</dt><dd data-i18n="key.move">移動</dd></div>
+      <div><dt data-i18n="key.mouse">滑鼠</dt><dd data-i18n="key.look">轉動視角</dd></div>
+      <div><dt>Shift</dt><dd data-i18n="key.run">快走</dd></div>
+      <div><dt>E</dt><dd data-i18n="key.interact">與注視的東西互動</dd></div>
+      <div><dt>H</dt><dd data-i18n="key.help">操作說明</dd></div>
+      <div><dt>T</dt><dd data-i18n="key.time">切換白天／黃昏／夜晚</dd></div>
+      <div><dt>V</dt><dd data-i18n="key.views">觀景點（高處與長焦的鏡頭）</dd></div>
+      <div><dt>M</dt><dd data-i18n="key.top">鳥瞰全區</dd></div>
+      <div><dt>L</dt><dd data-i18n="key.labels">區域標籤</dd></div>
+      <div><dt>N</dt><dd data-i18n="key.sound">聲音開／關</dd></div>
+      <div><dt>Esc</dt><dd data-i18n="key.esc">釋放滑鼠</dd></div>
+      <div><dt>`</dt><dd data-i18n="key.dev">開發者面板（日文鍵盤：Shift + @）</dd></div>
     </dl>
-    <button id="start" type="button">進入場景</button>
+    <button id="start" type="button" disabled data-i18n="preparing">準備中…</button>
   </div>
 </div>
 
@@ -42,44 +47,46 @@
   <button id="sound" type="button" aria-pressed="true" hidden>聲音：開</button>
   <button id="time" type="button" hidden>切換到黃昏</button>
 </div>
-<button id="helpbtn" type="button" hidden><kbd>H</kbd>操作說明</button>
-<div id="resume" hidden>點一下畫面繼續（或按住滑鼠拖曳轉動視角）</div>
+<button id="helpbtn" type="button" hidden><kbd>H</kbd><span data-i18n="ui.help">操作說明</span></button>
+<div id="resume" hidden data-i18n="ui.resume">點一下畫面繼續（或按住滑鼠拖曳轉動視角）</div>
 <div id="err" hidden></div>
 <div id="hint" aria-live="polite"></div>
 <div id="viewcap" aria-live="polite"></div>
 <div id="fade"></div>
 
 <div id="help" hidden>
-  <h2>操作說明</h2>
+  <h2 data-i18n="help.title">操作說明</h2>
   <dl class="keys">
-    <div><dt>W A S D</dt><dd>移動</dd></div>
-    <div><dt>滑鼠</dt><dd>轉動視角</dd></div>
-    <div><dt>Shift</dt><dd>快走</dd></div>
-    <div><dt>E</dt><dd>與注視的東西互動</dd></div>
-    <div><dt>T</dt><dd>切換白天／黃昏／夜晚</dd></div>
-    <div><dt>V</dt><dd>觀景點（高處與長焦的鏡頭）</dd></div>
-    <div><dt>M</dt><dd>鳥瞰全區</dd></div>
-    <div><dt>L</dt><dd>區域標籤</dd></div>
-    <div><dt>N</dt><dd>聲音開／關</dd></div>
-    <div><dt>Esc</dt><dd>釋放滑鼠</dd></div>
-    <div><dt>`</dt><dd>開發者面板（日文鍵盤：Shift + @）</dd></div>
+    <div><dt>W A S D</dt><dd data-i18n="key.move">移動</dd></div>
+    <div><dt data-i18n="key.mouse">滑鼠</dt><dd data-i18n="key.look">轉動視角</dd></div>
+    <div><dt>Shift</dt><dd data-i18n="key.run">快走</dd></div>
+    <div><dt>E</dt><dd data-i18n="key.interact">與注視的東西互動</dd></div>
+    <div><dt>T</dt><dd data-i18n="key.time">切換白天／黃昏／夜晚</dd></div>
+    <div><dt>V</dt><dd data-i18n="key.views">觀景點（高處與長焦的鏡頭）</dd></div>
+    <div><dt>M</dt><dd data-i18n="key.top">鳥瞰全區</dd></div>
+    <div><dt>L</dt><dd data-i18n="key.labels">區域標籤</dd></div>
+    <div><dt>N</dt><dd data-i18n="key.sound">聲音開／關</dd></div>
+    <div><dt>Esc</dt><dd data-i18n="key.esc">釋放滑鼠</dd></div>
+    <div><dt>`</dt><dd data-i18n="key.dev">開發者面板（日文鍵盤：Shift + @）</dd></div>
   </dl>
-  <h3>可以互動的東西</h3>
-  <p class="note">走到兩三步內、看著它，它會微微發亮，這時按 E。</p>
+  <h3 data-i18n="help.things">可以互動的東西</h3>
+  <p class="note" data-i18n="help.how">走到兩三步內、看著它，它會微微發亮，這時按 E。</p>
   <table class="things">
-    <tr><th>溫泉池</th><td>站在水深及膝以上的地方</td><td>泡湯，再按 E 起身</td></tr>
-    <tr><th>檜木桶</th><td>東屋下的池邊，小凳旁</td><td>舀水往身上淋</td></tr>
-    <tr><th>燈籠</th><td>石燈籠、行燈、足元灯、簷下吊燈籠、入口提燈</td><td>逐盞點燈、熄燈</td></tr>
-    <tr><th>足湯</th><td>北側望景台的檜木槽</td><td>坐下泡腳賞景，再按 E 起身</td></tr>
-    <tr><th>壺湯</th><td>東北角，圓池中央的陶壺</td><td>坐進壺裡賞景，再按 E 起身</td></tr>
-    <tr><th>躺椅</th><td>西北角的小木台</td><td>躺下看星星，再按 E 起身</td></tr>
-    <tr><th>低垂楓枝</th><td>湯屋往池子的小徑上方</td><td>搖落紅葉</td></tr>
-    <tr><th>牛奶</th><td>簷廊小台上，共三瓶</td><td>拿起來喝</td></tr>
+    <tr><th data-i18n="help.pool">溫泉池</th><td data-i18n="help.pool.where">站在水深及膝以上的地方</td><td data-i18n="help.pool.do">泡湯，再按 E 起身</td></tr>
+    <tr><th data-i18n="help.oke">檜木桶</th><td data-i18n="help.oke.where">東屋下的池邊，小凳旁</td><td data-i18n="help.oke.do">舀水往身上淋</td></tr>
+    <tr><th data-i18n="help.lamp">燈籠</th><td data-i18n="help.lamp.where">石燈籠、行燈、足元灯、簷下吊燈籠、入口提燈</td><td data-i18n="help.lamp.do">逐盞點燈、熄燈</td></tr>
+    <tr><th data-i18n="help.ashiyu">足湯</th><td data-i18n="help.ashiyu.where">北側望景台的檜木槽</td><td data-i18n="help.ashiyu.do">坐下泡腳賞景，再按 E 起身</td></tr>
+    <tr><th data-i18n="help.tsubo">壺湯</th><td data-i18n="help.tsubo.where">東北角，圓池中央的陶壺</td><td data-i18n="help.tsubo.do">坐進壺裡賞景，再按 E 起身</td></tr>
+    <tr><th data-i18n="help.chair">躺椅</th><td data-i18n="help.chair.where">西北角的小木台</td><td data-i18n="help.chair.do">躺下看星星，再按 E 起身</td></tr>
+    <tr><th data-i18n="help.maple">低垂楓枝</th><td data-i18n="help.maple.where">湯屋往池子的小徑上方</td><td data-i18n="help.maple.do">搖落紅葉</td></tr>
+    <tr><th data-i18n="help.milk">牛奶</th><td data-i18n="help.milk.where">簷廊小台上，共三瓶</td><td data-i18n="help.milk.do">拿起來喝</td></tr>
   </table>
-  <p class="note">夜裡把燈全部熄掉，星空會慢慢亮起來。鹿威し會自己注水、敲石，不必按鍵。</p>
-  <p class="close">按 H 關閉</p>
+  <p class="note" data-i18n="help.night">夜裡把燈全部熄掉，星空會慢慢亮起來。鹿威し會自己注水、敲石，不必按鍵。</p>
+  <p class="close" data-i18n="help.close">按 H 關閉</p>
 </div>
 
+<!-- i18n.js 先單獨載入：不必等 three 從 CDN 下載完，開始畫面就能先換成正確的語言 -->
+<script type="module" src="js/i18n.js"></script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>
