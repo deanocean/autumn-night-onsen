@@ -1,5 +1,5 @@
 // 全場共用的環境狀態：時間、太陽方向與光色。
-// 各個 shader 直接引用這些 uniform 物件，第三階段的日夜切換只要改這裡的值。
+// 各個 shader 直接引用這些 uniform 物件，日夜切換（daynight.js）只要改這裡的值。
 import * as THREE from 'three';
 
 // 交給水面、蒸氣、樹葉 shader 的燈具位置有幾格（GLSL 陣列長度要寫死；燈超過這個數就要調大）

@@ -1,5 +1,5 @@
 // 場景的「平面圖」：所有尺寸、位置、碰撞與地面高度都定義在這裡。
-// 之後各階段（材質、水、植栽、互動）都讀這份資料，配置只需要改這一處。
+// 材質、水、植栽、互動等各檔都讀這份資料，配置只需要改這一處。
 // 座標：x 向東、z 向南、y 向上；單位公尺。北側（-z）是崖邊，俯瞰海灣。
 
 export const POOL = { cx: 0, cz: -1, a: 7.0, b: 4.6, depth: 0.75, waterY: -0.12 };
@@ -231,20 +231,6 @@ circles.push({ x: PROPS.stool.x, z: PROPS.stool.z, r: 0.22 });
 circles.push({ x: PROPS.milk.x, z: PROPS.milk.z, r: 0.3 });
 
 export const START = { x: -5.2, z: 10.1, yaw: 0.12 };
-
-// 區域名稱（顯示目前所在位置）
-export function zoneAt(x, z) {
-  if (x > ENGAWA.x0 && x < ENGAWA.x1 && z > ENGAWA.z0 - 0.1) return '湯屋簷廊';
-  if (x > DECK.x0 && x < DECK.x1 && z < DECK.z1) return '望景木台';
-  if (x > LOUNGE.x0 && x < LOUNGE.x1 && z > LOUNGE.z0 && z < LOUNGE.z1) return '西翼・躺椅';
-  if (tsuboAt(x, z)) return '東翼・壺湯';
-  if (inWater(x, z)) {
-    return x > AZUMAYA.x0 && x < AZUMAYA.x1 && z > AZUMAYA.z0 && z < AZUMAYA.z1 ? '半露天區（池中）' : '主池';
-  }
-  if (x > AZUMAYA.x0 && x < AZUMAYA.x1 && z > AZUMAYA.z0 && z < AZUMAYA.z1) return '半露天區';
-  if (z > 2.5 && x < 3) return '石板小徑';
-  return '池畔';
-}
 
 export const LABELS = [
   ['湯屋簷廊（起點）', -7.5, 2.4, 9.6],

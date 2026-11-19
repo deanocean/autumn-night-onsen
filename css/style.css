@@ -171,7 +171,7 @@ h1 {
   border-radius: 3px;
 }
 
-/* 坐著觀星時，畫面上的按鈕淡出 */
+/* 坐下（足湯、躺椅、壺湯）時，畫面上的按鈕淡出 */
 body.quiet #time, body.quiet #sound, body.quiet #helpbtn { opacity: 0; pointer-events: none; transition: opacity 1.8s ease; }
 
 /* 左下角常駐的小字：提醒有操作說明可看 */

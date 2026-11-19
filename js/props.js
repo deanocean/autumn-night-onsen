@@ -216,7 +216,7 @@ export function createProps(world) {
   }
 
   // ---------- 足元灯 ----------
-  // 觀星處用的矮燈：寬大的鐵笠把往上的光全遮住，底下細木格子圍著和紙燈筒，光只落在腳邊
+  // 躺椅旁的矮燈：寬大的鐵笠把往上的光全遮住，底下細木格子圍著和紙燈筒，光只落在腳邊
   function ashimoto() {
     const g = new THREE.Group(), b = new Batch();
     const iron = std({ color: 0x1b1917, roughness: 0.5, metalness: 0.55 });
