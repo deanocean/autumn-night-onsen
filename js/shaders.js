@@ -99,27 +99,26 @@ const MODES = {
       r = mix(r, 1.0, moss * (1.0 - wet));
     }`,
   BASIN: /* glsl */ `
+    // 天然的岩床（不鋪石板）：池壁與淺處是跟池緣石頭同色調的濕岩，深處積著淺色的湯の花沉澱
     float surfH(vec3 wp, vec3 op){
-      vec3 v = voro(wp.xz * 1.25);
-      return rs(0.0, 0.06, v.y) * 0.02 + fbm2(wp * 9.0) * 0.006;
+      return fbm(wp * 2.4) * 0.03 + fbm2(wp * 9.0) * 0.006;
     }
     void surfC(vec3 wp, vec3 op, vec3 n, out vec3 c, out float r){
-      vec3 v = voro(wp.xz * 1.25);
-      c = mix(vec3(0.46, 0.50, 0.47), vec3(0.74, 0.76, 0.70), v.z);
-      c *= 0.82 + 0.3 * fbm2(wp * 5.0);
-      c *= mix(0.4, 1.0, rs(0.0, 0.05, v.y));
-      // 池壁：水面以上是被湯打濕的深色岩面（跟池緣的石頭、濕地面連成一片），水面下淺處漸漸過渡到淺色的池底
-      float h = wp.y - ${POOL.waterY.toFixed(3)} + (fbm2(wp * 7.0) - 0.5) * 0.025;
-      vec3 wetc = vec3(0.15, 0.14, 0.12) * (0.7 + 0.6 * fbm(wp * 3.0 + 2.0)) * mix(0.8, 1.0, rs(0.0, 0.05, v.y));
+      float h = wp.y - ${POOL.waterY.toFixed(3)} + (fbm2(wp * 7.0) - 0.5) * 0.025; // 相對水面的高度
+      float a = fbm(wp * 1.6 + 3.0);
+      vec3 rockc = vec3(0.15, 0.14, 0.12) * (0.65 + 0.7 * a) * (0.85 + 0.3 * vnoise(wp * 25.0));
+      rockc = mix(rockc, rockc * vec3(1.15, 1.0, 0.8), rs(0.55, 0.8, vnoise(wp * 2.3 + 11.0)) * 0.5); // 局部偏赭
+      vec3 floorc = vec3(0.52, 0.55, 0.50) * (0.8 + 0.35 * fbm2(wp * 1.2 + 5.0));
+      // 淺處（湯還透明、看得到底的地方）都是深色岩床；到湯夠濁的深度才漸漸變成淺色的池底
+      c = mix(rockc, floorc, rs(-0.2, -0.5, h));
       float above = rs(-0.005, 0.02, h);
-      c = mix(c, wetc, max(above, rs(-0.4, -0.02, h) * 0.8));
       // 水線上方一條很淡的湯の花（淺赭色的沉積）
       float crust = rs(0.004, 0.016, h) * rs(0.05, 0.022, h) * rs(0.35, 0.65, fbm2(wp * 11.0));
       c = mix(c, vec3(0.36, 0.32, 0.24) * (0.8 + 0.4 * vnoise(wp * 60.0)), crust * 0.55);
-      // 水底搖晃的光網（只在水面下）
+      // 水底搖晃的光網（只在水面下）。乳白的湯把光散開，所以是寬而淡的光斑，不是細亮線（細線從淺水透出來會像白色的格紋）
       vec2 q = wp.xz * 2.6 + vec2(vnoise(vec3(wp.xz * 1.3, uTime * 0.25)), vnoise(vec3(wp.zx * 1.3 + 5.0, uTime * 0.25))) * 1.6;
       float ca = voro(q + uTime * 0.12).y;
-      c *= 1.0 + pow(1.0 - rs(0.0, 0.22, ca), 3.0) * 0.55 * uCaustic * (1.0 - above);
+      c *= 1.0 + pow(1.0 - rs(0.0, 0.4, ca), 2.0) * 0.2 * uCaustic * (1.0 - above);
       r = mix(0.55, 0.22, above * (1.0 - crust));
     }`,
   STONE: /* glsl */ `
