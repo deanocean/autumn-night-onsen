@@ -505,15 +505,15 @@ export function buildWorld(scene) {
   rock(world, rand, L.CENTER_ROCK.x, L.CENTER_ROCK.z, L.CENTER_ROCK.r, L.CENTER_ROCK.h * 1.25, -0.62, 40);
   rock(world, rand, L.CENTER_ROCK.x - 1.1, L.CENTER_ROCK.z + 0.75, 0.5, 0.5, -0.6, 22);
   L.RIM_ROCKS.forEach((k) => rock(world, rand, k.x, k.z, k.r, k.h * 1.15, -0.3, 34));
-  // 把池岸連成一圈的中小型石塊；三個入口處只放低矮的踏石
+  // 把池岸連成一圈的中小型石塊，石腳沒入水裡蓋住水線；三個入口處只放低矮的踏石
   const gaps = [[2.14, 0.3], [Math.PI, 0.42], [-Math.PI, 0.42], [-1.57, 0.34]];
   const inGap = (th) => gaps.some(([c, w]) => Math.abs(th - c) < w);
   for (let i = 0; i < 84; i++) {
     const th = -Math.PI + (i / 84) * Math.PI * 2 + (rand() - 0.5) * 0.04;
-    const [x, z] = L.poolPoint(th, 1.015 + rand() * 0.045);
+    const [x, z] = L.poolPoint(th, 0.985 + rand() * 0.04);
     if (L.RIM_ROCKS.some((k) => Math.hypot(k.x - x, k.z - z) < k.r * 0.85)) { rand(); rand(); continue; }
     if (inGap(th)) rock(world, rand, x, z, 0.3 + rand() * 0.14, 0.12, -0.04, 14);
-    else rock(world, rand, x, z, 0.26 + rand() * 0.26, 0.2 + rand() * 0.26, -0.1, 18);
+    else rock(world, rand, x, z, 0.26 + rand() * 0.26, 0.2 + rand() * 0.26, -0.2, 18);
   }
   // 池畔散置的景石
   for (const [x, z, r, h] of [[-10.2, 1.4, 0.55, 0.5], [7.4, 6.6, 0.7, 0.6], [11.6, 1.2, 0.8, 0.75], [-6.6, -7.4, 0.6, 0.45], [4.6, -7.0, 0.5, 0.4], [-11.8, 8.6, 0.65, 0.5], [12.8, -10.9, 0.9, 0.8]]) {

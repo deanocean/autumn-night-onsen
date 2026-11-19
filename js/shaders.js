@@ -38,7 +38,7 @@ float poolT(vec2 p){
 }
 float poolDepth(vec2 p){
   float t = poolT(p);
-  float floorY = -${POOL.depth.toFixed(3)} * rs(1.0, 0.78, t);
+  float floorY = -${POOL.depth.toFixed(3)} * rs(1.0, ${POOL.wall.toFixed(3)}, t);
   return max(0.0, ${POOL.waterY.toFixed(3)} - floorY);
 }
 `;
@@ -108,11 +108,19 @@ const MODES = {
       c = mix(vec3(0.46, 0.50, 0.47), vec3(0.74, 0.76, 0.70), v.z);
       c *= 0.82 + 0.3 * fbm2(wp * 5.0);
       c *= mix(0.4, 1.0, rs(0.0, 0.05, v.y));
-      // 水底搖晃的光網
+      // 池壁：水面以上是被湯打濕的深色岩面（跟池緣的石頭、濕地面連成一片），水面下淺處漸漸過渡到淺色的池底
+      float h = wp.y - ${POOL.waterY.toFixed(3)} + (fbm2(wp * 7.0) - 0.5) * 0.025;
+      vec3 wetc = vec3(0.15, 0.14, 0.12) * (0.7 + 0.6 * fbm(wp * 3.0 + 2.0)) * mix(0.8, 1.0, rs(0.0, 0.05, v.y));
+      float above = rs(-0.005, 0.02, h);
+      c = mix(c, wetc, max(above, rs(-0.4, -0.02, h) * 0.8));
+      // 水線上方一條很淡的湯の花（淺赭色的沉積）
+      float crust = rs(0.004, 0.016, h) * rs(0.05, 0.022, h) * rs(0.35, 0.65, fbm2(wp * 11.0));
+      c = mix(c, vec3(0.36, 0.32, 0.24) * (0.8 + 0.4 * vnoise(wp * 60.0)), crust * 0.55);
+      // 水底搖晃的光網（只在水面下）
       vec2 q = wp.xz * 2.6 + vec2(vnoise(vec3(wp.xz * 1.3, uTime * 0.25)), vnoise(vec3(wp.zx * 1.3 + 5.0, uTime * 0.25))) * 1.6;
       float ca = voro(q + uTime * 0.12).y;
-      c *= 1.0 + pow(1.0 - rs(0.0, 0.22, ca), 3.0) * 0.55 * uCaustic;
-      r = 0.55;
+      c *= 1.0 + pow(1.0 - rs(0.0, 0.22, ca), 3.0) * 0.55 * uCaustic * (1.0 - above);
+      r = mix(0.55, 0.22, above * (1.0 - crust));
     }`,
   STONE: /* glsl */ `
     float surfH(vec3 wp, vec3 op){ return fbm2(wp * 16.0) * 0.004; }

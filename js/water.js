@@ -78,7 +78,9 @@ void main(){
   float alpha = mix(0.10, 0.99, turb);
 
   // 岸邊與湯口的白沫
-  float foam = rs(0.035, 0.0, depth + (vnoise(vec3(p * 9.0, uTime * 0.6)) - 0.5) * 0.03) * 0.5;
+  // 岸邊的沫只是斷斷續續的一小團一小團（連成一圈會變成描在池緣的白線）
+  float foam = rs(0.025, 0.0, depth + (vnoise(vec3(p * 9.0, uTime * 0.6)) - 0.5) * 0.03) * 0.35
+             * rs(0.42, 0.7, vnoise(vec3(p * 2.2, uTime * 0.12)));
   float ds = distance(p, uSplash.xy);
   foam += rs(0.75, 0.0, ds) * (0.45 + 0.55 * vnoise(vec3(p * 14.0, uTime * 3.0))) * uSplash.z;
   foam = clamp(foam, 0.0, 1.0);

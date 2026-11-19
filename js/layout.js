@@ -2,7 +2,8 @@
 // 材質、水、植栽、互動等各檔都讀這份資料，配置只需要改這一處。
 // 座標：x 向東、z 向南、y 向上；單位公尺。北側（-z）是崖邊，俯瞰海灣。
 
-export const POOL = { cx: 0, cz: -1, a: 7.0, b: 4.6, depth: 0.75, waterY: -0.12 };
+// wall：池壁從池岸（t = 1）降到池底的位置（t = wall）；越接近 1 池壁越陡、水面以上露出的岩面越窄
+export const POOL = { cx: 0, cz: -1, a: 7.0, b: 4.6, depth: 0.75, waterY: -0.12, wall: 0.84 };
 
 // 不規則池岸：橢圓半徑乘上一個隨角度變化的係數
 export function poolRim(theta) {
@@ -89,7 +90,7 @@ export function groundY(x, z) {
     return TSUBO.floorY;
   }
   const t = poolT(x, z);
-  if (t < 1) return -POOL.depth * smooth(1, 0.78, t);
+  if (t < 1) return -POOL.depth * smooth(1, POOL.wall, t);
   return 0;
 }
 
@@ -114,7 +115,7 @@ const rimSpec = [
   [2.95, 0.05, 0.55, 0.45],
 ];
 export const RIM_ROCKS = rimSpec.map(([th, off, r, h]) => {
-  const [x, z] = poolPoint(th, 1 + off);
+  const [x, z] = poolPoint(th, 1 + off * 0.5);
   return { x, z, r, h };
 });
 RIM_ROCKS.forEach((k) => circles.push({ x: k.x, z: k.z, r: k.r * 0.9 }));
