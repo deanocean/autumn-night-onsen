@@ -1,6 +1,8 @@
 # 貼圖來源（Poly Haven，CC0）
 
-檔名規則：`<slot>_diff.jpg`（顏色）、`<slot>_nor.jpg`（法線，OpenGL / nor_gl）、`<slot>_rough.jpg`（粗糙度）。
+檔名規則：`<slot>_diff.webp`（顏色）、`<slot>_nor.jpg`（法線，OpenGL / nor_gl）、`<slot>_rough.webp`（粗糙度）。
+
+從 Poly Haven 下載的 JPG 經 `tools/tex-prep.py` 重新編碼（解析度不變）：顏色 WebP q90、粗糙度 WebP q85、法線 JPG q88 不做色度抽樣（WebP 會把色度縮半，法線失真較大）。新增或更換貼圖時，把原檔照上面的檔名放進一個資料夾，執行 `python3 tools/tex-prep.py <來源> textures`；格式改了要同步改 `js/shaders.js` 的 `TEX_EXT`。
 
 | slot | 素材 id | 素材頁 | 授權 | 解析度 | 實際涵蓋尺寸 | 木紋方向 |
 |---|---|---|---|---|---|---|
