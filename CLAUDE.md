@@ -72,6 +72,7 @@
 - [x] 開發者面板
 - [x] 7A 鳥瞰時保留湯屋屋頂、7B 介面三語
 - [x] 7C 池緣（岩床、石腳沒入水裡）與望樓（寶形＋朱欄）
+- [x] 8A 線上版貼圖晚到：等貼圖到齊才開放進場（按鈕顯示百分比）、貼圖重新編碼 37 → 18 MB
 
 目前沒有進行中的段落。之後有新的修改，先提企劃再開新的一段。
 
@@ -82,8 +83,8 @@
 | `js/layout.js` | 平面圖：所有位置、尺寸、碰撞體、地面高度、標籤文字。改配置只改這裡 |
 | `js/env.js` | 共用狀態 `G`（時間、太陽、環境光、night、燈具位置等 uniform） |
 | `js/shaders.js` | 表面材質：在標準材質上注入 ROCK／GROUND／BASIN／STONE／WOOD／ROOF（杮葺）／KAWARA（本瓦）／ROKUSHO（緑青銅板）／PLASTER／BAMBOO／BARK 表面函式。ROCK／GROUND／STONE／WOOD／PLASTER 的近看細節來自 `textures/` 的實拍貼圖（三向投影，不需 UV），苔、濕潤、風化、木板接縫由程序雜訊疊加；貼圖尺寸在 `TEXTURES`、色調在 `TUNE` |
-| `textures/` | Poly Haven 的 CC0 PBR 貼圖（每組 diff／nor／rough），來源與備選見 `textures/README.md` |
-| `tools/` | 開發用工具（截圖 `shot.js`、效能 `perf.js`、遠景構圖預覽 `pano.js`、音檔前處理），不屬於網站本體 |
+| `textures/` | Poly Haven 的 CC0 PBR 貼圖（每組 diff／nor／rough；顏色與粗糙度是 WebP、法線是 JPG），來源與備選見 `textures/README.md`；重新編碼用 `tools/tex-prep.py` |
+| `tools/` | 開發用工具（截圖 `shot.js`、效能 `perf.js`、遠景構圖預覽 `pano.js`、音檔前處理、貼圖轉檔 `tex-prep.py`），不屬於網站本體 |
 | `docs/製作紀錄.md` | 已完成各階段的詳細紀錄，平常不必讀 |
 | `js/world.js` | 地形、岩石、湯屋（本瓦屋頂、唐破風、望樓、高欄、簷下提燈）、東屋、望景台、竹垣、簷下吊燈籠與入口提燈 |
 | `js/props.js` | 石燈籠、行燈、足元灯、檜木桶與小凳、鹿威し、牛奶。零件用 `Batch` 依材質合併成少數 mesh；會動或可互動的部分保持獨立 |
@@ -127,6 +128,7 @@
 - 不撒落葉的範圍在 `layout.js` 的 `noLeaf()`（新增放在地上的物件時要加）。
 
 ### 其他
+- 線上版（GitHub Pages）要從網路抓貼圖，開始按鈕會等貼圖到齊才開放；新增貼圖時留意檔案大小（先過 `tools/tex-prep.py`）。
 - 滑鼠鎖定只能在點擊事件中請求；被拒時可按住拖曳轉視角。
 - 這台的 node 把 `.js` 當 CommonJS：要在 node 裡載入 `js/terrain.js` 得先複製成 `.mjs`（`tools/pano.js` 就是這樣做）。
 - Claude 聽不到聲音，音量要靠使用者回報；可調的是各層音量 `MIX` 與各互動聲的 `gain`。

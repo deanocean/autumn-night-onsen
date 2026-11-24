@@ -14,7 +14,7 @@ import { Player } from './player.js';
 import { createInteract } from './interact.js';
 import { createAudio } from './audio.js';
 import { G } from './env.js';
-import { texturesReady } from './shaders.js';
+import { texturesReady, textureProgress } from './shaders.js';
 import { t, onLang } from './i18n.js';
 
 const canvas = document.getElementById('scene');
@@ -165,8 +165,12 @@ const clock = new THREE.Clock();
 // 做法是把平常隱藏的東西（發亮的殼、水珠、流星、標籤……）暫時全部打開、關掉視錐剔除，
 // 在夜晚、黃昏、白天各實際畫一次（含陰影與水面倒影），再還原。整段在同一個工作裡完成，
 // 瀏覽器只會顯示最後那張正常的畫面。
+// 貼圖要全部到齊才暖機、開放進場：還沒到的貼圖在 shader 裡取樣是黑的（線上版網路慢時岩石會整塊變黑），
+// 晚到的貼圖第一次送進顯示卡也會頓一下。等待時開始按鈕顯示百分比。
 async function warmUp() {
-  await Promise.race([texturesReady(), new Promise((r) => setTimeout(r, 20000))]);
+  const tick = setInterval(showStart, 200);
+  await texturesReady();
+  clearInterval(tick);
   try { await renderer.compileAsync(scene, camera); } catch (e) { console.warn(e); }
   const hidden = [], culled = [];
   scene.traverse((o) => {
@@ -205,7 +209,11 @@ function frame() {
 // 供自動檢查使用
 window.__onsen = { toggleDev, get dev() { return dev; }, player, views, scene, camera, renderer, G, dayNight, guides, lights, sky, vista, trees, props, water, interact, audio, ready: false };
 
-const showStart = () => { startBtn.textContent = t(startBtn.disabled ? 'preparing' : 'start'); };
+// 準備中：貼圖還在下載時加上百分比（數字不必翻譯），到齊後編譯 shader 的那幾秒只顯示「準備中…」
+const showStart = () => {
+  const p = textureProgress();
+  startBtn.textContent = !startBtn.disabled ? t('start') : t('preparing') + (p < 1 ? ` ${Math.floor(p * 100)}%` : '');
+};
 // 語言只在開始畫面切換：重寫按鈕上的字（區域標籤由 labels.js 自己重畫）
 onLang(() => { showStart(); showTime(); showSound(); });
 

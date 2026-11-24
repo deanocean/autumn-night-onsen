@@ -325,18 +325,23 @@ const TEX_USE = {
 const TUNE = { ROCK_TINT: 'vec3(0.80, 0.82, 0.86)', GROUND_TINT: 'vec3(0.60, 0.56, 0.50)', WOOD_GAIN: '1.25', KAWARA_COL: 'vec3(0.105, 0.115, 0.135)',
   ROKUSHO_A: 'vec3(0.10, 0.25, 0.20)', ROKUSHO_B: 'vec3(0.21, 0.41, 0.33)' }; // 緑青的深淺兩色
 
+// 各種貼圖的檔案格式（顏色、粗糙度用 WebP，法線用不做色度抽樣的 JPG；理由見 tools/tex-prep.py）
+const TEX_EXT = { diff: 'webp', nor: 'jpg', rough: 'webp' };
 const loader = new THREE.TextureLoader();
-// 每張貼圖一個 Promise（載入失敗也算結束）；main.js 的暖機會等它們全部到齊
+// 每張貼圖一個 Promise（載入失敗也算結束）；main.js 的暖機會等它們全部到齊，開始按鈕顯示進度
 const pendingTextures = [];
+let texturesDone = 0;
 export const texturesReady = () => Promise.all(pendingTextures);
+export const textureProgress = () => (pendingTextures.length ? texturesDone / pendingTextures.length : 1);
 const texCache = new Map();
 function texSet(slot) {
   if (texCache.has(slot)) return texCache.get(slot);
   const mean = { value: new THREE.Vector3(0.5, 0.5, 0.5) };
   const load = (kind, srgb, onLoad) => {
     let done;
-    pendingTextures.push(new Promise((r) => { done = r; }));
-    const t = loader.load(`textures/${slot}_${kind}.jpg`, (tex) => { onLoad?.(tex); done(); }, undefined, () => done());
+    pendingTextures.push(new Promise((r) => { done = () => { texturesDone++; r(); }; }));
+    const url = `textures/${slot}_${kind}.${TEX_EXT[kind]}`;
+    const t = loader.load(url, (tex) => { onLoad?.(tex); done(); }, undefined, () => { console.warn('貼圖載入失敗：', url); done(); });
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = 8;
     t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
